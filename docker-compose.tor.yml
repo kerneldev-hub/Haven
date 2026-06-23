@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  app:
+    # Your primary application (Coolify or generic app)
+    image: my-haven-app:latest
+    ports:
+      - "3000:3000"
+
+  tor-sidecar:
+    # Use standard tor proxy container for actively exposing hidden services
+    image: dperson/torproxy
+    restart: unless-stopped
+    volumes:
+      # Map the hidden service dir so keys persist across redeploys.
+      # This ensures your .onion URL does not change!
+      - tor_config:/var/lib/tor/hidden_service/
+    environment:
+      # Map hidden service port 80 to 'app' container on port 3000.
+      - "TOR_HIDDEN_SERVICE=80 app:3000"
+    ports:
+      - "9050:9050" # Optional: exposing local SOCKS proxy
+      
+volumes:
+  tor_config:
+    # The hostname file containing the .onion address will be found at:
+    # /var/lib/docker/volumes/my_stack_tor_config/_data/hostname (on Host OS)
