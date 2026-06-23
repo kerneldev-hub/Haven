@@ -27,6 +27,7 @@ interface ReleaseLatestPayload {
   assets: any[];
   error?: boolean;
   message?: string;
+  isDemoFallback?: boolean;
 }
 
 function detectOS() {
@@ -252,6 +253,15 @@ export default function DownloadPage() {
               ⚠️ <strong className="text-foreground">Platform Support:</strong> At this time, HAVEN is packaged only for Windows, Linux, and Android. macOS and iOS are explicitly NOT supported.
             </p>
           </div>
+
+          {!loading && releasePayload?.isDemoFallback && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl mb-8 max-w-xl mx-auto text-left flex items-start gap-3">
+              <span className="text-amber-400 mt-0.5">⚠️</span>
+              <p className="text-xs text-amber-300 leading-normal font-sans">
+                <strong className="text-foreground text-amber-200">Fallback/Local Mode:</strong> Checked <code className="font-mono text-zinc-300 text-[11px] px-1 bg-zinc-950/50 rounded">{releasePayload?.repoPath}</code> but no public compiled releases are available yet on GitHub. Displaying live target binary cards for the automated pipeline compilation targets.
+              </p>
+            </div>
+          )}
 
           <div className="inline-flex flex-wrap items-center justify-center gap-3">
             <div className="flex items-center gap-2 bg-white/5 border border-border/60 px-4 py-2 rounded-full font-mono text-xs text-muted-foreground">
