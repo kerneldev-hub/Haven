@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { 
   Download, Monitor, TerminalSquare, Smartphone, 
   ShieldCheck, Github, ChevronRight, Globe, Check, Copy, ExternalLink, 
-  AlertTriangle, UploadCloud, Search, RefreshCw 
+  AlertTriangle, UploadCloud, Search, RefreshCw, Loader 
 } from 'lucide-react';
 import { calculateSHA256 } from '../lib/checksum';
 
@@ -19,8 +19,15 @@ interface PlatformBuild {
   isInstaller?: boolean;
 }
 
-const RELEASE_TAG = "v2.1.0-beta";
-const REPO_URL = "https://github.com/dzlab/haven";
+interface ReleaseLatestPayload {
+  repoPath: string;
+  repoUrl: string;
+  tagName: string | null;
+  htmlUrl: string;
+  assets: any[];
+  error?: boolean;
+  message?: string;
+}
 
 function detectOS() {
   const ua = navigator.userAgent;
@@ -32,10 +39,70 @@ function detectOS() {
   return "web";
 }
 
+function mapAssetToBuild(asset: any): PlatformBuild {
+  const nameLower = asset.name.toLowerCase();
+  let osKey: 'windows' | 'linux' | 'android' | 'web' = 'web';
+  let displayName = asset.name;
+  let subLabel = "Production distribution package";
+  let isInstaller = false;
+  let icon = <Monitor className="w-6 h-6 text-sky-400" />;
+
+  if (nameLower.endsWith('.msi')) {
+    osKey = 'windows';
+    displayName = 'Windows MSI Installer';
+    subLabel = 'Recommended for corporate installations';
+    isInstaller = true;
+    icon = <Monitor className="w-6 h-6 text-sky-400" />;
+  } else if (nameLower.endsWith('.exe')) {
+    osKey = 'windows';
+    displayName = 'Windows Direct Setup';
+    subLabel = 'Standard standalone setup executable';
+    isInstaller = true;
+    icon = <Monitor className="w-6 h-6 text-sky-400" />;
+  } else if (nameLower.endsWith('.appimage')) {
+    osKey = 'linux';
+    displayName = 'Linux Portable AppImage';
+    subLabel = 'Distro-agnostic self-contained app image';
+    isInstaller = true;
+    icon = <TerminalSquare className="w-6 h-6 text-emerald-400" />;
+  } else if (nameLower.endsWith('.deb')) {
+    osKey = 'linux';
+    displayName = 'Ubuntu / Debian Native';
+    subLabel = 'Native package built for APT managers';
+    isInstaller = false;
+    icon = <TerminalSquare className="w-6 h-6 text-emerald-400" />;
+  } else if (nameLower.endsWith('.apk')) {
+    osKey = 'android';
+    displayName = 'Android App Core';
+    subLabel = 'Direct sideloading build with fully integrated features';
+    isInstaller = true;
+    icon = <Smartphone className="w-6 h-6 text-amber-400" />;
+  }
+
+  return {
+    id: asset.name,
+    name: displayName,
+    osKey,
+    icon,
+    fileName: asset.name,
+    fileSize: asset.fileSize,
+    checksum: asset.checksum,
+    downloadUrl: asset.downloadUrl,
+    subLabel,
+    isInstaller
+  };
+}
+
 export default function DownloadPage() {
   const [detectedOS, setDetectedOS] = useState<'windows' | 'linux' | 'android' | 'web'>('web');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
+  // Dynamic API state
+  const [loading, setLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [releasePayload, setReleasePayload] = useState<ReleaseLatestPayload | null>(null);
+  const [builds, setBuilds] = useState<PlatformBuild[]>([]);
+
   // Verification Utility State
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [verifyingFile, setVerifyingFile] = useState<File | null>(null);
@@ -47,70 +114,38 @@ export default function DownloadPage() {
   useEffect(() => {
     const os = detectOS();
     setDetectedOS(os);
-  }, []);
 
-  const builds: PlatformBuild[] = [
-    {
-      id: 'win-msi',
-      name: 'Windows MSI Installer',
-      osKey: 'windows',
-      icon: <Monitor className="w-6 h-6 text-sky-400" />,
-      fileName: 'HAVEN-Setup.msi',
-      fileSize: '54.2 MB',
-      checksum: '5f899eab915ab9c50117424c8bb1a4de1e39a3f2ccab247fe1f7da3dcbf003e4',
-      downloadUrl: `${REPO_URL}/releases/download/${RELEASE_TAG}/HAVEN-Setup.msi`,
-      subLabel: 'Recommended for corporate installations',
-      isInstaller: true
-    },
-    {
-      id: 'win-exe',
-      name: 'Windows Direct Setup',
-      osKey: 'windows',
-      icon: <Monitor className="w-6 h-6 text-sky-400" />,
-      fileName: 'HAVEN-Setup.exe',
-      fileSize: '56.8 MB',
-      checksum: '7a052ff37c44beae906a56e0baeff09c91f1ea24fd8fe55181e19ca4feee72da',
-      downloadUrl: `${REPO_URL}/releases/download/${RELEASE_TAG}/HAVEN-Setup.exe`,
-      subLabel: 'Standard standalone setup executable',
-      isInstaller: true
-    },
-    {
-      id: 'linux-appimage',
-      name: 'Linux Portable AppImage',
-      osKey: 'linux',
-      icon: <TerminalSquare className="w-6 h-6 text-emerald-400" />,
-      fileName: 'HAVEN.AppImage',
-      fileSize: '68.7 MB',
-      checksum: 'c189b0d2d7870ae86becc09c53648eb11e2fec173cebaf7520e722ab06a72c1c',
-      downloadUrl: `${REPO_URL}/releases/download/${RELEASE_TAG}/HAVEN.AppImage`,
-      subLabel: 'Distro-agnostic self-contained app image',
-      isInstaller: true
-    },
-    {
-      id: 'linux-deb',
-      name: 'Ubuntu / Debian Native',
-      osKey: 'linux',
-      icon: <TerminalSquare className="w-6 h-6 text-emerald-400" />,
-      fileName: 'haven.deb',
-      fileSize: '41.1 MB',
-      checksum: '221fa0c2d7871bf2c6e64caeff09c91f1ea4fc2ab173cebaf73c2ab062e21b2d',
-      downloadUrl: `${REPO_URL}/releases/download/${RELEASE_TAG}/haven.deb`,
-      subLabel: 'Native package built for APT managers',
-      isInstaller: false
-    },
-    {
-      id: 'android-apk',
-      name: 'Android App Core',
-      osKey: 'android',
-      icon: <Smartphone className="w-6 h-6 text-amber-400" />,
-      fileName: 'HAVEN.apk',
-      fileSize: '28.1 MB',
-      checksum: 'e29a9bfcf5fb2ef5abcf89b1c55fd09c91f1ba4fcc02e1c7da2da7ffce230491b',
-      downloadUrl: `${REPO_URL}/releases/download/${RELEASE_TAG}/HAVEN.apk`,
-      subLabel: 'Direct sideloading build with fully integrated features',
-      isInstaller: true
+    // Fetch dynamic releases from our newly added Express route
+    async function fetchReleases() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/releases/latest');
+        if (!res.ok) {
+          throw new Error(`HTTP Error: Status ${res.status}`);
+        }
+        const data: ReleaseLatestPayload = await res.json();
+        
+        if (data.error) {
+          setApiError(data.message || 'GitHub API connection error');
+        }
+        
+        setReleasePayload(data);
+        if (data.assets && data.assets.length > 0) {
+          const mapped = data.assets.map(mapAssetToBuild);
+          setBuilds(mapped);
+        } else {
+          setBuilds([]);
+        }
+      } catch (err: any) {
+        console.error("Failed to load release assets dynamically:", err);
+        setApiError(err.message || 'Connection offline');
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+
+    fetchReleases();
+  }, []);
 
   const triggerCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -119,7 +154,7 @@ export default function DownloadPage() {
   };
 
   const getRecommendedBuild = (): PlatformBuild | null => {
-    if (detectedOS === 'web') return null;
+    if (detectedOS === 'web' || builds.length === 0) return null;
     return builds.find(b => b.osKey === detectedOS && b.isInstaller) || builds.find(b => b.osKey === detectedOS) || null;
   };
 
@@ -155,11 +190,15 @@ export default function DownloadPage() {
     setIsComputing(true);
     setComputedHash('');
     
-    const matchingBuild = builds.find(b => file.name.toLowerCase().includes(b.fileName.toLowerCase()) || b.fileName.toLowerCase().includes(file.name.toLowerCase()));
-    if (matchingBuild) {
-      setSelectedExpectedHash(matchingBuild.checksum);
+    if (builds.length > 0) {
+      const matchingBuild = builds.find(b => file.name.toLowerCase().includes(b.fileName.toLowerCase()) || b.fileName.toLowerCase().includes(file.name.toLowerCase()));
+      if (matchingBuild) {
+        setSelectedExpectedHash(matchingBuild.checksum);
+      } else {
+        setSelectedExpectedHash(builds[0].checksum);
+      }
     } else {
-      setSelectedExpectedHash(builds[0].checksum);
+      setSelectedExpectedHash('');
     }
 
     try {
@@ -193,7 +232,11 @@ export default function DownloadPage() {
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-white/5 border border-border/40 text-[11px] font-mono rounded-full text-muted-foreground mb-5 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Release Tag: </span>
-            <span className="font-extrabold text-white">{RELEASE_TAG}</span>
+            <span className="font-extrabold text-white">
+              {loading ? (
+                <span className="opacity-50 font-sans text-[10px]">Loading...</span>
+              ) : releasePayload?.tagName || 'Awaiting Initial deployment'}
+            </span>
           </div>
 
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tighter mb-6 leading-none text-transparent bg-clip-text bg-gradient-to-br from-white via-neutral-100 to-neutral-400">
@@ -206,7 +249,7 @@ export default function DownloadPage() {
           {/* Supported platform scope announcement */}
           <div className="p-4 bg-zinc-950/40 border border-border/40 rounded-2xl mb-8 max-w-xl mx-auto">
             <p className="text-xs text-zinc-400 leading-normal font-sans">
-              ⚠️ <strong className="text-foreground">Platform Support:</strong> At this time, HAVEN is packaged only for Windows, Linux, and Android. macOS is not supported.
+              ⚠️ <strong className="text-foreground">Platform Support:</strong> At this time, HAVEN is packaged only for Windows, Linux, and Android. macOS and iOS are explicitly NOT supported.
             </p>
           </div>
 
@@ -226,8 +269,54 @@ export default function DownloadPage() {
           </div>
         </div>
 
+        {/* Dynamic State handling: Loading Skeleton */}
+        {loading && (
+          <div className="max-w-4xl mx-auto mb-16 space-y-8">
+            <div className="h-44 bg-card/40 border border-border/40 animate-pulse rounded-3xl p-8 flex justify-between items-center">
+              <div className="space-y-3">
+                <div className="h-3 w-28 bg-white/10 rounded"></div>
+                <div className="h-6 w-60 bg-white/15 rounded"></div>
+                <div className="h-3.5 w-80 bg-white/10 rounded"></div>
+              </div>
+              <div className="h-10 w-44 bg-white/10 rounded-xl"></div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="p-6 bg-card/25 border border-border/40 animate-pulse rounded-2xl space-y-4">
+                  <div className="h-8 w-8 bg-white/10 rounded-lg"></div>
+                  <div className="h-5 w-40 bg-white/15 rounded"></div>
+                  <div className="h-3 w-52 bg-white/10 rounded"></div>
+                  <div className="h-8 w-full bg-white/10 rounded-xl"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic state handling: Offline / No builds built yet */}
+        {!loading && builds.length === 0 && (
+          <div className="max-w-xl mx-auto mb-16 p-8 bg-zinc-950/60 border border-white/5 rounded-3xl text-center backdrop-blur-md">
+            <AlertTriangle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-white mb-2">No compiled binaries available</h3>
+            <p className="text-xs text-muted-foreground leading-normal mb-6">
+              {apiError ? `Reason: ${apiError}.` : "We haven't compiled the final release artifacts for this version tag yet. You can find active tags, branches, and release logs on the official GitHub interface."}
+            </p>
+            <a 
+              href={releasePayload?.htmlUrl || "https://github.com/dzlab/haven/releases"} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-border/40 text-xs text-white rounded-xl font-mono font-bold transition-all"
+            >
+              <Github className="w-4 h-4" />
+              <span>View Releases on GitHub</span>
+              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
+            </a>
+          </div>
+        )}
+
         {/* Recommended Installer Panel */}
-        {recommendedBuild && (
+        {!loading && recommendedBuild && (
           <div className="mb-16 max-w-4xl mx-auto bg-gradient-to-b from-card/90 to-card/40 border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden backdrop-blur-md text-left">
             <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-sky-500/5 rounded-full filter blur-3xl pointer-events-none transform translate-x-1/3 -translate-y-1/3"></div>
             
@@ -247,7 +336,7 @@ export default function DownloadPage() {
                     <span className="font-mono text-[10px] text-muted-foreground truncate">{recommendedBuild.checksum}</span>
                     <button 
                       onClick={() => triggerCopy(recommendedBuild.id, recommendedBuild.checksum)}
-                      className="text-muted-foreground hover:text-foreground shrink-0 ml-1.5 cursor-pointer"
+                      className="text-muted-foreground hover:text-foreground shrink-0 ml-1.5 cursor-pointer animate-none bg-transparent border-none p-0"
                       title="Copy Expected Signatures"
                     >
                       {copiedId === recommendedBuild.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -271,68 +360,70 @@ export default function DownloadPage() {
         )}
 
         {/* Manual Fallback Registry Grid */}
-        <div className="mb-20">
-          <div className="flex items-center justify-between mb-8 pb-3 border-b border-border/40">
-            <h2 className="text-xl font-extrabold tracking-tight text-foreground">Manual Binary Manifest</h2>
-            <span className="text-[11px] font-mono font-bold text-muted-foreground/60 select-none">SHA-256 Hashed Artifacts</span>
-          </div>
+        {!loading && builds.length > 0 && (
+          <div className="mb-20">
+            <div className="flex items-center justify-between mb-8 pb-3 border-b border-border/40">
+              <h2 className="text-xl font-extrabold tracking-tight text-foreground">Manual Binary Manifest</h2>
+              <span className="text-[11px] font-mono font-bold text-muted-foreground/60 select-none">SHA-256 Hashed Artifacts</span>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-            {builds.map((b) => {
-              const isRecommended = recommendedBuild?.id === b.id;
-              return (
-                <div 
-                  key={b.id} 
-                  className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col justify-between bg-card/40 backdrop-blur-sm ${
-                    isRecommended 
-                      ? 'border-sky-500/30 bg-card/60 ring-1 ring-sky-500/10' 
-                      : 'border-border/50 hover:border-border/80'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-4 select-none">
-                      <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-xl">
-                        {b.icon}
-                      </div>
-                      <div className="flex gap-2">
-                        {isRecommended && (
-                          <span className="text-[9px] uppercase font-mono font-extrabold tracking-wider px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full">
-                            Suggested
-                          </span>
-                        )}
-                        <span className="text-[9px] font-mono uppercase font-bold tracking-wider px-2 py-0.5 bg-white/5 text-muted-foreground border border-border/50 rounded-full">
-                          {b.fileSize}
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="text-lg font-bold tracking-tight mb-1 text-foreground">{b.name}</h3>
-                    <p className="text-xs text-muted-foreground mb-4 leading-normal h-8">{b.subLabel}</p>
-
-                    <div className="mb-5 bg-background/50 border border-border/30 rounded-lg p-2.5 flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-muted-foreground truncate mr-2 select-all">SHA256: {b.checksum}</span>
-                      <button 
-                        onClick={() => triggerCopy(b.id, b.checksum)}
-                        className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                        title="Copy cryptographic signature"
-                      >
-                        {copiedId === b.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <a 
-                    href={b.downloadUrl}
-                    className="w-full group flex items-center justify-between px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-border/40 text-foreground rounded-xl transition-all font-bold text-xs cursor-pointer"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
+              {builds.map((b) => {
+                const isRecommended = recommendedBuild?.id === b.id;
+                return (
+                  <div 
+                    key={b.id} 
+                    className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col justify-between bg-card/40 backdrop-blur-sm ${
+                      isRecommended 
+                        ? 'border-sky-500/30 bg-card/60 ring-1 ring-sky-500/10' 
+                        : 'border-border/50 hover:border-border/80'
+                    }`}
                   >
-                    <span className="flex items-center gap-1.5"><Download className="w-3.5 h-3.5" /> Download {b.fileName}</span>
-                    <ChevronRight className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                  </a>
-                </div>
-              );
-            })}
+                    <div>
+                      <div className="flex items-center justify-between mb-4 select-none">
+                        <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-xl">
+                          {b.icon}
+                        </div>
+                        <div className="flex gap-2">
+                          {isRecommended && (
+                            <span className="text-[9px] uppercase font-mono font-extrabold tracking-wider px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full">
+                              Suggested
+                            </span>
+                          )}
+                          <span className="text-[9px] font-mono uppercase font-bold tracking-wider px-2 py-0.5 bg-white/5 text-muted-foreground border border-border/50 rounded-full">
+                            {b.fileSize}
+                          </span>
+                        </div>
+                      </div>
+
+                      <h3 className="text-lg font-bold tracking-tight mb-1 text-foreground">{b.name}</h3>
+                      <p className="text-xs text-muted-foreground mb-4 leading-normal h-8">{b.subLabel}</p>
+
+                      <div className="mb-5 bg-background/50 border border-border/30 rounded-lg p-2.5 flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-muted-foreground truncate mr-2 select-all">SHA256: {b.checksum}</span>
+                        <button 
+                          onClick={() => triggerCopy(b.id, b.checksum)}
+                          className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer bg-transparent border-none p-0"
+                          title="Copy cryptographic signature"
+                        >
+                          {copiedId === b.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <a 
+                      href={b.downloadUrl}
+                      className="w-full group flex items-center justify-between px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-border/40 text-foreground rounded-xl transition-all font-bold text-xs cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5"><Download className="w-3.5 h-3.5" /> Download {b.fileName}</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Drag-And-Drop Cryptographic Integrity Hash Verifier */}
         <section className="mb-20 max-w-4xl mx-auto" id="verifier">
@@ -388,7 +479,7 @@ export default function DownloadPage() {
                   </div>
                   <button 
                     onClick={clearVerifier}
-                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-mono text-[10px] font-bold rounded-lg transition-all cursor-pointer"
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-mono text-[10px] font-bold rounded-lg transition-all cursor-pointer bg-transparent"
                   >
                     Reset Verifier
                   </button>
@@ -424,7 +515,7 @@ export default function DownloadPage() {
                       {computedHash && (
                         <button 
                           onClick={() => triggerCopy('verifier-computed', computedHash)}
-                          className="text-muted-foreground hover:text-white ml-2 cursor-pointer"
+                          className="text-muted-foreground hover:text-white ml-2 cursor-pointer bg-transparent border-none p-0"
                         >
                           {copiedId === 'verifier-computed' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
@@ -495,7 +586,7 @@ export default function DownloadPage() {
 
             <div className="flex flex-col gap-4 text-left">
               <a 
-                href={REPO_URL} 
+                href={releasePayload?.repoUrl || "https://github.com/dzlab/haven"} 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="group flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-border/30 hover:bg-white/10 hover:border-border/60 transition-all text-left"

@@ -131,6 +131,119 @@ async function startServer() {
     };
   };
 
+  // Releases dynamic query endpoint (with 5-minute cache)
+  let cachedReleaseData: { timestamp: number, payload: any } | null = null;
+  app.get('/api/releases/latest', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (cachedReleaseData && (now - cachedReleaseData.timestamp) < 5 * 60 * 1000) {
+        console.log("[GITHUB RELEASES API] Returning cached data");
+        return res.json(cachedReleaseData.payload);
+      }
+
+      const repoPath = process.env.GITHUB_REPOSITORY || 'dzlab/haven';
+      console.log(`[GITHUB RELEASES API] Inquiring releases for: ${repoPath}`);
+      
+      const githubUrl = `https://api.github.com/repos/${repoPath}/releases/latest`;
+      const response = await fetch(githubUrl, {
+        headers: {
+          'User-Agent': 'haven-os-client',
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log(`[GITHUB RELEASES API] Info: Checked ${repoPath}. No public releases published yet (status 404).`);
+          const payload = {
+            error: false,
+            isEmpty: true,
+            message: 'No public releases found yet on the repository.',
+            repoPath,
+            repoUrl: `https://github.com/${repoPath}`,
+            tagName: null,
+            htmlUrl: `https://github.com/${repoPath}/releases`,
+            assets: []
+          };
+          // Don't cache the 404 too long if they might push a release soon
+          return res.json(payload);
+        }
+        throw new Error(`GitHub releases API returned status ${response.status}`);
+      }
+
+      const rawRelease = await response.json();
+      const tagName = rawRelease.tag_name;
+      const htmlUrl = rawRelease.html_url;
+      const assets = rawRelease.assets || [];
+
+      // Check if SHA256SUMS.txt exists in assets list
+      const sumAsset = assets.find((a: any) => a.name === 'SHA256SUMS.txt');
+      const checksumsMap: { [key: string]: string } = {};
+
+      if (sumAsset) {
+        try {
+          console.log(`[GITHUB RELEASES API] Downloading SHA256SUMS.txt from ${sumAsset.browser_download_url}`);
+          const txtRes = await fetch(sumAsset.browser_download_url, {
+            headers: { 'User-Agent': 'haven-os-client' }
+          });
+          if (txtRes.ok) {
+            const txt = await txtRes.text();
+            const lines = txt.split('\n');
+            for (const line of lines) {
+              const matched = line.trim().match(/^([a-fA-F0-9]{64})\s+\*?(.+)$/);
+              if (matched) {
+                const [_, hash, filename] = matched;
+                checksumsMap[filename.trim()] = hash.trim();
+              }
+            }
+            console.log("[GITHUB RELEASES API] Parsed checksums map successfully", checksumsMap);
+          }
+        } catch (checksumErr) {
+          console.warn("[GITHUB RELEASES API] Note: Could not parse index checksums", checksumErr);
+        }
+      }
+
+      // Map assets to a standardized dynamic structure format
+      const mappedAssets = assets
+        .filter((a: any) => a.name !== 'SHA256SUMS.txt')
+        .map((a: any) => {
+          const bytes = a.size;
+          const mbSize = (bytes / (1024 * 1024)).toFixed(1);
+          return {
+            name: a.name,
+            fileName: a.name,
+            fileSize: `${mbSize} MB`,
+            downloadUrl: a.browser_download_url,
+            checksum: checksumsMap[a.name] || 'N/A'
+          };
+        });
+
+      const payload = {
+        repoPath,
+        repoUrl: `https://github.com/${repoPath}`,
+        tagName,
+        htmlUrl,
+        assets: mappedAssets
+      };
+
+      cachedReleaseData = { timestamp: now, payload };
+      res.json(payload);
+    } catch (e: any) {
+      console.log("[GITHUB RELEASES API] Info: Releases fetch finished or skipped. Detail:", e.message || e);
+      // Fallback state payload returning real repo config, let the UI handle empty asset states gracefully with HTTP 200
+      const repoPath = process.env.GITHUB_REPOSITORY || 'dzlab/haven';
+      res.status(200).json({
+        error: true,
+        message: e.message || 'No public releases found yet on the repository.',
+        repoPath,
+        repoUrl: `https://github.com/${repoPath}`,
+        tagName: null,
+        htmlUrl: `https://github.com/${repoPath}/releases`,
+        assets: []
+      });
+    }
+  });
+
   // Chat API route
   app.post('/api/chat', rateLimiter(10, 60000), async (req, res) => {
     try {
