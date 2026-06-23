@@ -1,14 +1,61 @@
 import { HavenExtension, SandboxExecutionLog, PersonSpace } from '../types';
 
+/**
+ * Interface representing the secure sandboxed API injected into every Haven plugin runtime.
+ * These methods are bound inside a virtualized closure, preventing global window prototype leakage.
+ */
 export interface PluginSandboxAPI {
+  /**
+   * Retrieves the raw files dictionary from the current active workspace.
+   * Requires permission: "Read Workspace Files"
+   * @returns Record of paths to file content strings
+   */
   readWorkspaceFiles: () => Record<string, string>;
+
+  /**
+   * Safe setter method to modify or create a workspace file by path name.
+   * Requires permission: "Write Workspace Files"
+   * @param filename Relative path of the workspace target file
+   * @param content String data block to write
+   * @returns Boolean indicating write success state
+   */
   writeWorkspaceFile: (filename: string, content: string) => boolean;
+
+  /**
+   * Inject visual custom CSS themes dynamically into the main document header.
+   * Requires permission: "Inject CSS"
+   * @param css Standard stylesheet string block
+   * @returns Boolean indicating insertion success
+   */
   injectCSS: (css: string) => boolean;
+
+  /**
+   * Safe user-facing notify tool triggering global react-toast alerts.
+   * Runs unhindered inside any virtualized sandbox thread.
+   * @param message Text copy to notify the user
+   * @param type Notification visual styling tier
+   */
   notifyUser: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
+
+  /**
+   * Retrieves memory cells that represent long-term workflow learnings.
+   * Requires permission: "Read Memories"
+   * @returns Array of aligned context memory strings
+   */
   getSavedMemories: () => string[];
+
+  /**
+   * Safely dispatches visual telemetry payload logs into the local testing stream.
+   * Requires permission: "Mock Webhook Events"
+   * @param payload Any serializable JSON object for testing
+   */
   triggerWebhookSim: (payload: any) => void;
 }
 
+/**
+ * Core PluginManager handles sandbox registration, isolated token execution, and 
+ * real-time permission access proxy audits.
+ */
 export class PluginManager {
   private static instance: PluginManager;
   private logsCallback: ((log: SandboxExecutionLog) => void) | null = null;

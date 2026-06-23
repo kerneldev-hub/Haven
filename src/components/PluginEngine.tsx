@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { 
   Terminal, ShieldAlert, CheckCircle2, Play, Trash2, 
   Settings, HelpCircle, HardDrive, Plus, Info, RefreshCw, Layers,
-  ChevronDown, ChevronRight, CheckSquare, Square
+  ChevronDown, ChevronRight, CheckSquare, Square, Search, BookOpen
 } from 'lucide-react';
 import { HavenExtension, SandboxExecutionLog, PersonSpace } from '../types';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/components';
+import PluginDiscovery from './PluginDiscovery';
 
 interface PluginEngineProps {
   activeSpace: PersonSpace;
@@ -136,11 +137,47 @@ export default function PluginEngine({
     }, 450);
   };
 
+  const [pluginMode, setPluginMode] = useState<'sandbox' | 'marketplace'>('sandbox');
+
   return (
-    <div className="space-y-6">
-      
-      {/* 1200px+ Desktop Responsive Layout / Less than 1200px Accordion stack */}
-      <div className="hidden xl:grid xl:grid-cols-12 gap-6 items-start text-left">
+    <div className="space-y-8">
+      {/* Dynamic Sub-tab Selector */}
+      <div className="flex items-center justify-between p-4 bg-card/45 border border-border/40 rounded-xl">
+        <div className="text-left">
+          <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">PLUGIN ENGINE ECOSYSTEM</span>
+          <h3 className="text-sm font-black text-foreground mt-0.5">Secure Sandboxing & Integrations</h3>
+        </div>
+
+        <div className="flex gap-2 p-1 bg-[#090a0c] border border-border/30 rounded-lg select-none">
+          <button
+            onClick={() => setPluginMode('sandbox')}
+            className={`py-1.5 px-3 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              pluginMode === 'sandbox' ? 'bg-primary text-background' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            💻 Active Sandbox
+          </button>
+          <button
+            onClick={() => setPluginMode('marketplace')}
+            className={`py-1.5 px-3 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              pluginMode === 'marketplace' ? 'bg-primary text-background' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            🔌 Discover Plugins
+          </button>
+        </div>
+      </div>
+
+      {pluginMode === 'marketplace' ? (
+        <PluginDiscovery 
+          extensions={extensions}
+          setExtensions={setExtensions}
+          onClose={() => setPluginMode('sandbox')}
+        />
+      ) : (
+        <div className="space-y-6 animate-fadeIn">
+          {/* 1200px+ Desktop Responsive Layout / Less than 1200px Accordion stack */}
+          <div className="hidden xl:grid xl:grid-cols-12 gap-6 items-start text-left">
         
         {/* PANE 1: EXTENSION MANAGER (Registry + Permissions Pane) */}
         <div className="xl:col-span-4 space-y-6">
@@ -517,6 +554,8 @@ export default function PluginEngine({
 
       </div>
 
+      </div>
+      )}
     </div>
   );
 }

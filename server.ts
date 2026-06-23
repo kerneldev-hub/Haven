@@ -9,11 +9,67 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
 import { eq, desc, and } from 'drizzle-orm';
+import { z } from 'zod';
 
 async function startServer() {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
+
+  // STEP 6C: Security Headers Middleware (CSP, X-Content-Type-Options, etc.)
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self' data: https:; script-src 'self' 'unsafe-eval' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio https://*.ai.studio;"
+    );
+    next();
+  });
+
+  // STEP 10C: API Request Instrumentation & Audit Logging
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const ua = req.headers['user-agent'] || 'Unknown-UA';
+    res.on('finish', () => {
+      // Only log actual API routes to prevent clogging standard out and matching static files containing 'error' substrings
+      if (req.path.startsWith('/api/')) {
+        const duration = Date.now() - start;
+        console.log(`[API ACCESS LOG] ${req.method} ${req.path} -> Status: ${res.statusCode} | ${duration}ms | IP: ${ip} | UA: ${ua}`);
+      }
+    });
+    next();
+  });
+
+  // STEP 6A: Double-Submit Cookie CSRF Prevention Engine
+  app.get('/api/auth/csrf-token', (req, res) => {
+    const csrfToken = crypto.randomBytes(24).toString('hex');
+    // Set cookie lax, readable on frontend
+    res.cookie('haven_csrf', csrfToken, { 
+      httpOnly: false, 
+      secure: process.env.NODE_ENV === 'production', 
+      sameSite: 'lax' 
+    });
+    res.json({ csrfToken });
+  });
+
+  const csrfProtection = (req: any, res: any, next: any) => {
+    if (['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(req.method)) {
+      return next();
+    }
+    // Exclude webhooks as they are triggered by third-parties and verified via SHA255 HMAC of body
+    if (req.path === '/api/payments/webhook') {
+      return next();
+    }
+    const csrfHeader = req.headers['x-csrf-token'];
+    const csrfCookie = req.cookies?.haven_csrf;
+    if (!csrfCookie || csrfHeader !== csrfCookie) {
+      return res.status(403).json({ error: 'CSRF token validation failed. Access Denied.' });
+    }
+    next();
+  };
   
   const PORT = 3000;
   
@@ -24,8 +80,9 @@ async function startServer() {
   });
   const db = drizzle(sqlClient, { schema });
 
-  // Sync basic schema for dev locally (migrations)
+  // Sync basic schema for dev locally with cascade constraints and indices (STEP 10A)
   try {
+    await sqlClient.execute(`PRAGMA foreign_keys = ON;`);
     await sqlClient.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id text PRIMARY KEY,
@@ -46,7 +103,8 @@ async function startServer() {
         currency text NOT NULL,
         transaction_id text NOT NULL,
         status text NOT NULL,
-        created_at integer DEFAULT CURRENT_TIMESTAMP
+        created_at integer DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
     `);
     await sqlClient.execute(`
@@ -58,7 +116,8 @@ async function startServer() {
         start_date integer DEFAULT CURRENT_TIMESTAMP,
         end_date integer NOT NULL,
         amount_paid integer NOT NULL,
-        currency text NOT NULL
+        currency text NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
     `);
     await sqlClient.execute(`
@@ -80,7 +139,8 @@ async function startServer() {
         description text,
         status text NOT NULL DEFAULT 'active',
         created_at integer DEFAULT CURRENT_TIMESTAMP,
-        updated_at integer DEFAULT CURRENT_TIMESTAMP
+        updated_at integer DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
     `);
     await sqlClient.execute(`
@@ -92,9 +152,14 @@ async function startServer() {
         type text NOT NULL,
         content text,
         created_at integer DEFAULT CURRENT_TIMESTAMP,
-        updated_at integer DEFAULT CURRENT_TIMESTAMP
+        updated_at integer DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
     `);
+
+    // Create secure indices (STEP 10A)
+    await sqlClient.execute(`CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp);`);
+    await sqlClient.execute(`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id);`);
   } catch(err) {
     console.error("DB Init error", err);
   }
@@ -340,6 +405,26 @@ async function startServer() {
 
   const JWT_SECRET = process.env.JWT_SECRET || 'HAVEN_ORCHESTRATOR_EDGE_FALLBACK_SECRET_39X2';
 
+  // Request Validator Schemas (STEP 6A & 6C)
+  const checkoutBodySchema = z.object({
+    planId: z.enum(['PRO', 'TEAM', 'ENTERPRISE', 'FREE']),
+    paymentMethod: z.enum(['chargily', 'crypto', 'global']),
+    currency: z.string().default('USD'),
+    amount: z.union([z.number(), z.string()]),
+    email: z.string().email().optional(),
+    userId: z.string()
+  });
+
+  const verifyBodySchema = z.object({
+    invoiceId: z.string()
+  });
+
+  const adminActionBodySchema = z.object({
+    paymentId: z.string(),
+    action: z.enum(['confirm', 'reject', 'refund']),
+    reason: z.string().optional()
+  });
+
   // Format Helper matching requirements
   const apiResponse = (source: string, data: any, status: 'ok' | 'degraded' | 'offline' = 'ok') => ({
     status,
@@ -450,14 +535,20 @@ async function startServer() {
     next();
   };
 
-  // Helper to get active tier of user
-  app.get('/api/payments/user-tier/:userId', async (req, res) => {
+  // Helper to get active tier of user (STEP 6A: supports lookups via userId or username)
+  app.get('/api/payments/user-tier/:userIdOrUsername', async (req, res) => {
     try {
-      const { userId } = req.params;
-      const sub = await db.query.subscriptions.findFirst({
-        where: (s, { eq, and }) => and(eq(s.userId, userId), eq(s.status, 'active'))
+      const { userIdOrUsername } = req.params;
+      const foundUser = await db.query.users.findFirst({
+        where: (u, { eq, or }) => or(eq(u.id, userIdOrUsername), eq(u.username, userIdOrUsername))
       });
-      res.json({ tier: sub ? sub.planId : 'FREE' });
+      if (!foundUser) {
+        return res.json({ tier: 'FREE' });
+      }
+      const sub = await db.query.subscriptions.findFirst({
+        where: (s, { eq, and }) => and(eq(s.userId, foundUser.id), eq(s.status, 'active'))
+      });
+      res.json({ tier: sub ? sub.planId : foundUser.tier || 'FREE' });
     } catch (err: any) {
       res.json({ tier: 'FREE' });
     }
@@ -499,12 +590,13 @@ async function startServer() {
     }
   });
 
-  app.post('/api/payments/admin/action', rateLimiter(20, 60000), requireAdmin, async (req, res) => {
+  app.post('/api/payments/admin/action', rateLimiter(20, 60000), csrfProtection, requireAdmin, async (req, res) => {
     try {
-      const { paymentId, action, reason } = req.body;
-      if (!paymentId || !action) {
-        return res.status(400).json({ error: 'paymentId and action required' });
+      const parsedBody = adminActionBodySchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
       }
+      const { paymentId, action, reason } = parsedBody.data;
 
       const payments = await db.select().from(schema.payments).where(eq(schema.payments.id, paymentId));
       if (payments.length === 0) {
@@ -558,13 +650,13 @@ async function startServer() {
     }
   });
 
-  app.post('/api/payments/checkout', rateLimiter(20, 60000), async (req, res) => {
+  const handleCheckoutInvoiceCreation = async (req: any, res: any) => {
     try {
-      const { planId, paymentMethod, currency, amount, email, userId } = req.body;
-      
-      if (!planId || !paymentMethod || !amount || !userId) {
-        return res.status(400).json({ error: 'Missing critical parameters for HAVEN CHECKOUT ENGINE' });
+      const parsedBody = checkoutBodySchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
       }
+      const { planId, paymentMethod, currency, amount, email, userId } = parsedBody.data;
 
       const invoiceId = `havpay-${Date.now().toString().slice(-6)}`;
       
@@ -573,7 +665,7 @@ async function startServer() {
         userId: userId,
         provider: paymentMethod === 'chargily' ? 'chargily' : (paymentMethod === 'crypto' ? 'crypto' : 'global'),
         method: paymentMethod === 'chargily' ? 'EDAHABIA / SATIM' : (paymentMethod === 'crypto' ? 'USDT (TRC20)' : 'PayPal Direct Wallet'),
-        amount: parseFloat(amount),
+        amount: typeof amount === 'string' ? parseFloat(amount) : amount,
         currency: currency || 'USD',
         transactionId: `TXN-${Math.random().toString(36).substring(2, 11).toUpperCase()}`,
         status: 'pending',
@@ -600,15 +692,38 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  };
+
+  // STEP 6A: Support BOTH '/api/payments/checkout' and '/api/payments/create-invoice' with CSRF and Zod.
+  app.post('/api/payments/checkout', rateLimiter(20, 60000), csrfProtection, handleCheckoutInvoiceCreation);
+  app.post('/api/payments/create-invoice', rateLimiter(20, 60000), csrfProtection, handleCheckoutInvoiceCreation);
+
+  // STEP 6B: Persist Free Tier downgrade to Database Subscriptions and profile
+  app.post('/api/payments/downgrade-free', rateLimiter(20, 60000), csrfProtection, async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      await db.update(schema.users).set({ tier: 'FREE' }).where(eq(schema.users.id, userId));
+      await db.update(schema.subscriptions).set({ status: 'canceled' }).where(eq(schema.subscriptions.userId, userId));
+      await addAuditLog('none', userId, 'failed', 'User voluntarily downgraded active membership to FREE tier.');
+
+      res.json({ success: true, message: 'Successfully transitioned user tier to FREE in database.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  // Client polling for verify - Auto approve logic removed
-  app.post('/api/payments/verify', rateLimiter(60, 60000), async (req, res) => {
+  // Client polling for verify - Requires CSRF protection and Schema validations
+  app.post('/api/payments/verify', rateLimiter(60, 60000), csrfProtection, async (req, res) => {
     try {
-      const { invoiceId } = req.body;
-      if (!invoiceId) {
-        return res.status(400).json({ error: 'invoiceId required' });
+      const parsedBody = verifyBodySchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
       }
+      const { invoiceId } = parsedBody.data;
 
       const payments = await db.select().from(schema.payments).where(eq(schema.payments.id, invoiceId));
       if (payments.length === 0) {
@@ -713,6 +828,18 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // STEP 10B: Central Global Express Error Handling Middleware
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error('[CENTRAL SERVER FATAL EXCEPTION]:', err);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: process.env.NODE_ENV === 'production' 
+        ? 'A sudden high-impact incident occurred on backend application nodes.' 
+        : err.message,
+      timestamp: Date.now()
+    });
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);

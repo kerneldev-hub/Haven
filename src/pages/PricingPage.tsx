@@ -23,6 +23,14 @@ export default function PricingPage() {
     return localStorage.getItem('haven_user_tier') || 'FREE';
   });
 
+  const [csrfToken, setCsrfToken] = useState<string>('');
+  const [activeSubscription, setActiveSubscription] = useState<any>(null);
+
+  const getCsrfToken = () => {
+    const match = document.cookie.match(/haven_csrf=([^;]+)/);
+    return match ? match[1] : csrfToken;
+  };
+
   useEffect(() => {
     // Check dynamic tier from database backend on load
     const user = localStorage.getItem('haven_user') || 'gamerdzbba7';
@@ -35,7 +43,34 @@ export default function PricingPage() {
         }
       })
       .catch(err => console.warn('Could not sync user tier from live backend database:', err));
-  }, []);
+
+    // Also fetch csrf token (STEP 6A)
+    fetch('/api/auth/csrf-token')
+      .then(r => r.json())
+      .then(data => {
+        if (data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        }
+      })
+      .catch(err => console.warn('Could not bootstrap secure CSRF context:', err));
+  }, [currentTier]);
+
+  useEffect(() => {
+    if (currentTier !== 'FREE') {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 30);
+      setActiveSubscription({
+        planId: currentTier,
+        startDate: new Date().toLocaleDateString(),
+        endDate: renewalDate.toLocaleDateString(),
+        amount: currentTier === 'TEAM' ? 90.35 : 29.45,
+        currency: 'USD',
+        status: 'active'
+      });
+    } else {
+      setActiveSubscription(null);
+    }
+  }, [currentTier]);
 
   // Checkout Engine States
   const [checkoutPlan, setCheckoutPlan] = useState<'FREE' | 'PRO' | 'TEAM' | null>(null);
@@ -86,10 +121,28 @@ export default function PricingPage() {
   // Launch Checkout Engine Instance
   const startCheckout = (planId: 'FREE' | 'PRO' | 'TEAM') => {
     if (planId === 'FREE') {
-      // Downgrade or claim free
-      localStorage.setItem('haven_user_tier', 'FREE');
-      setCurrentTier('FREE');
-      showToast('Your workspace node has been reset to basic Free tier limits.', 'info');
+      // STEP 6B: Persist Free Tier downgrade to Database Subscriptions and profile
+      fetch('/api/payments/downgrade-free', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrfToken()
+        },
+        body: JSON.stringify({ userId: currentUser })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem('haven_user_tier', 'FREE');
+          setCurrentTier('FREE');
+          showToast('Your workspace node has been reset to basic Free tier limits in DB.', 'success');
+        } else {
+          showToast(`Downgrade error: ${data.error}`, 'error');
+        }
+      })
+      .catch(err => {
+        showToast(`Could not contact downgrade endpoint: ${err.message}`, 'error');
+      });
       return;
     }
     setCheckoutPlan(planId);
@@ -140,7 +193,10 @@ export default function PricingPage() {
 
     fetch('/api/payments/checkout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken()
+      },
       body: JSON.stringify({
         planId,
         paymentMethod: method,
@@ -197,7 +253,10 @@ export default function PricingPage() {
     try {
       const response = await fetch('/api/payments/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrfToken()
+        },
         body: JSON.stringify({
           planId: checkoutPlan,
           paymentMethod: method,
@@ -260,7 +319,10 @@ export default function PricingPage() {
         // Now poll verification standardly
         const response = await fetch('/api/payments/verify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrfToken()
+          },
           body: JSON.stringify({
             invoiceId: invoice.invoice.id
           })
@@ -268,10 +330,17 @@ export default function PricingPage() {
 
         const data = await response.json();
         if (data.success) {
-          // Success checkout step transition
-          setCheckoutStep(3);
           localStorage.setItem('haven_user_tier', checkoutPlan!);
           setCurrentTier(checkoutPlan!);
+          
+          navigate('/checkout/success', {
+            state: {
+              planId: checkoutPlan,
+              invoiceId: invoice.invoice.id,
+              amount: invoice.invoice.amount,
+              currency: invoice.invoice.currency
+            }
+          });
           
           // Trigger mock webhook payload for platform logs consistency
           try {
@@ -320,7 +389,10 @@ export default function PricingPage() {
 
         const response = await fetch('/api/payments/verify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrfToken()
+          },
           body: JSON.stringify({
             invoiceId: invoice.invoice.id
           })
@@ -328,9 +400,17 @@ export default function PricingPage() {
 
         const data = await response.json();
         if (data.success && data.payment.status === 'confirmed') {
-          setCheckoutStep(3);
           localStorage.setItem('haven_user_tier', checkoutPlan!);
           setCurrentTier(checkoutPlan!);
+          
+          navigate('/checkout/success', {
+            state: {
+              planId: checkoutPlan,
+              invoiceId: invoice.invoice.id,
+              amount: invoice.invoice.amount,
+              currency: invoice.invoice.currency
+            }
+          });
         } else {
           setVerificationFeedback('Invoice pending. No matching transaction detected. Try again or check with administrator.');
         }
@@ -396,6 +476,55 @@ export default function PricingPage() {
             </Badge>
           </div>
         </div>
+
+        {/* VIEW ACTIVE SUBSCRIPTION SECTION (STEP 6B) */}
+        {currentTier !== 'FREE' && activeSubscription && (
+          <div className="max-w-4xl mx-auto mb-10 bg-card border border-border/80 p-6 rounded-2xl backdrop-blur-xl animate-in slide-in-from-top-4 duration-300">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-2 text-left">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-lg font-bold">Active System Nodes & Subscriptions</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your enterprise resource allocations are fully provisioned. The subscription nodes are active and secured.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 font-mono text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase">Plan Tier</span>
+                    <span className="font-extrabold text-foreground">{activeSubscription.planId} NODE</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase">Service Status</span>
+                    <span className="font-bold text-emerald-500 flex items-center gap-1">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      ACTIVE
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase">Renewal Cycle Date</span>
+                    <span className="font-bold text-foreground">{activeSubscription.endDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase">Resource Billing Rate</span>
+                    <span className="font-bold text-foreground">
+                      {activeSubscription.amount} {activeSubscription.currency}/mo
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 w-full md:w-auto self-center">
+                <Button 
+                  onClick={() => startCheckout('FREE')}
+                  variant="outline" 
+                  className="text-xs border-dashed border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400 w-full md:w-auto cursor-pointer"
+                >
+                  Downgrade / Stop Subscription Node
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ==================== HAVEN CHECKOUT ENGINE (ACTIVE VIEW OVERLAY / MODULE) ==================== */}
         {checkoutPlan && (

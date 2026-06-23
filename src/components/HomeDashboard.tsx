@@ -7,6 +7,7 @@ import {
   Settings2, Eye, EyeOff, LayoutGrid, Check, Plus
 } from 'lucide-react';
 import { Button } from './ui/components';
+import { Badge } from './ui/Badge';
 import { PersonSpace, CustomArtifact } from '../types';
 import ArtifactStudio from './ArtifactStudio';
 

@@ -6,10 +6,10 @@ import { Navigate, useLocation } from 'react-router-dom';
  * state, and handles context redirects using an optimistic cache pattern.
  */
 export default function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
-  const [isAdmin, setIsAdmin] = useState(() => {
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('haven_user_role') === 'admin' || localStorage.getItem('haven_user_tier') === 'ENTERPRISE';
   });
-  const [isAuthed, setIsAuthed] = useState(() => {
+  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     return localStorage.getItem('haven_session') === 'active';
   });
   const location = useLocation();
@@ -60,4 +60,3 @@ export default function ProtectedRoute({ children, adminOnly = false }: { childr
 
   return <>{children}</>;
 }
-

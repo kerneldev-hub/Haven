@@ -20,6 +20,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 const ProjectPage = lazy(() => import('./pages/ProjectPage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
+const SuccessPage = lazy(() => import('./pages/SuccessPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -89,6 +90,7 @@ export default function App() {
                   <Route path="/p/:projectId" element={<ProjectPage />} />
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/checkout/success" element={<SuccessPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
                   <Route path="/docs/*" element={<DocsPage />} />
