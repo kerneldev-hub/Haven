@@ -58,3 +58,14 @@ export interface SandboxExecutionLog {
   status: 'GRANTED' | 'DENIED' | 'SIMULATED';
   message: string;
 }
+
+export interface CustomArtifact {
+  id: string;
+  name: string;
+  type: 'focus-timer' | 'habit-tracker' | 'api-checker' | 'margin-calculator' | 'markdown-notes';
+  accentColor: 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
+  blueprintName: string;
+  state: Record<string, any>;
+  createdAt: string;
+}
+

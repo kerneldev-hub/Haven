@@ -12,7 +12,7 @@ import {
 
 import { Button } from '../components/ui/components';
 import { Badge } from '../components/ui/Badge';
-import { PersonSpace, CustomAgent, CommunityPost, AppMarketCard, HavenExtension, SandboxExecutionLog } from '../types';
+import { PersonSpace, CustomAgent, CommunityPost, AppMarketCard, HavenExtension, SandboxExecutionLog, CustomArtifact } from '../types';
 
 // Import our newly created modular subcomponents!
 import PluginEngine from '../components/PluginEngine';
@@ -344,6 +344,48 @@ export default function HomePage() {
   }, [activeSpace, activeSpaceId, savedMemories]);
 
   // ----------------------------------------------------
+  // CUSTOM MOUNTED WORKSPACE ARTIFACTS STATE
+  // ----------------------------------------------------
+  const [installedArtifacts, setInstalledArtifacts] = useState<CustomArtifact[]>(() => {
+    const saved = localStorage.getItem('haven_installed_artifacts');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('haven_installed_artifacts', JSON.stringify(installedArtifacts));
+  }, [installedArtifacts]);
+
+  const handleArtifactAdded = (art: CustomArtifact) => {
+    setInstalledArtifacts(prev => [...prev, art]);
+    setGlobalToast({ message: `Successfully Mounted "${art.name}" onto your active Dashboard!`, type: 'success' });
+    setTimeout(() => setGlobalToast(null), 4000);
+  };
+
+  const handleUninstallArtifact = (id: string) => {
+    setInstalledArtifacts(prev => prev.filter(a => a.id !== id));
+    setGlobalToast({ message: `Successfully unmounted widget from dashboard.`, type: 'info' });
+    setTimeout(() => setGlobalToast(null), 4000);
+  };
+
+  const handleShareArtifact = (art: CustomArtifact) => {
+    const updatedArt = { ...art, id: `art-${Date.now()}` }; 
+    const pPayload: CommunityPost = {
+      id: `p-art-${Date.now()}`,
+      author: 'operator_node',
+      title: `🎨 [CUSTOM ARTIFACT RELEASE] ${art.name}`,
+      body: `I have built and released a custom interactive workbench tool!\n\nTemplate blueprint: ${art.blueprintName}\nColor theme: ${art.accentColor}\n\n[ARTIFACT_DATA:${JSON.stringify(updatedArt)}]\n\nClick "Mount to Dashboard" to launch this micro-widget inside your live workspace dashboard immediately.`,
+      likes: 1,
+      commentsCount: 0,
+      tag: 'Architecture',
+      channelId: 'software-lore',
+      timestamp: new Date().toLocaleTimeString()
+    };
+    setPosts(prev => [pPayload, ...prev]);
+    setGlobalToast({ message: `Successfully broadcasted widget blueprint to Community feed!`, type: 'success' });
+    setTimeout(() => setGlobalToast(null), 4000);
+  };
+
+  // ----------------------------------------------------
   // COMMUNITY SECTION STATE
   // ----------------------------------------------------
   const [posts, setPosts] = useState<CommunityPost[]>(() => {
@@ -576,6 +618,10 @@ export default function HomePage() {
             onAddShortcut={handleAddShortcut}
             onRemoveShortcut={handleRemoveShortcut}
             switchTab={switchTab}
+            installedArtifacts={installedArtifacts}
+            onArtifactAdded={handleArtifactAdded}
+            onUninstallArtifact={handleUninstallArtifact}
+            onShareArtifact={handleShareArtifact}
           />
         )}
 
@@ -613,6 +659,7 @@ export default function HomePage() {
           <CommunitySection 
             posts={posts}
             setPosts={setPosts}
+            onInstallSharedArtifact={handleArtifactAdded}
           />
         )}
 

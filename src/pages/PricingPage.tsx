@@ -42,6 +42,14 @@ export default function PricingPage() {
   const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3 | 4>(1); // 1: Choose Method, 2: Simulator/Details, 3: Success Check
   const [checkoutMethod, setCheckoutMethod] = useState<'chargily' | 'global' | 'crypto' | null>(null);
   const [isCryptoModalOpen, setIsCryptoModalOpen] = useState(false);
+
+  // Custom toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
   
   // Invoice state from backend
   const [invoice, setInvoice] = useState<any>(null);
@@ -81,7 +89,7 @@ export default function PricingPage() {
       // Downgrade or claim free
       localStorage.setItem('haven_user_tier', 'FREE');
       setCurrentTier('FREE');
-      alert('Your workspace node has been reset to basic Free tier limits.');
+      showToast('Your workspace node has been reset to basic Free tier limits.', 'info');
       return;
     }
     setCheckoutPlan(planId);
@@ -151,11 +159,11 @@ export default function PricingPage() {
           setIsCryptoModalOpen(true);
         }
       } else {
-        alert(`Error generating payment gateway checkout: ${data.error}`);
+        showToast(`Error generating payment: ${data.error}`, 'error');
       }
     })
     .catch(err => {
-      alert(`Network error creating checkout: ${err.message}`);
+      showToast(`Network error creating checkout: ${err.message}`, 'error');
     })
     .finally(() => {
       setVerifyLoading(false);
@@ -208,10 +216,10 @@ export default function PricingPage() {
           setIsCryptoModalOpen(true);
         }
       } else {
-        alert(`Error generating payment gateway checkout: ${data.error}`);
+        showToast(`Error generating payment: ${data.error}`, 'error');
       }
     } catch (err: any) {
-      alert(`Network error creating checkout: ${err.message}`);
+      showToast(`Network error creating checkout: ${err.message}`, 'error');
     } finally {
       setVerifyLoading(false);
     }
@@ -227,7 +235,7 @@ export default function PricingPage() {
   const handleSimulateChargilySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cardNumber || !cardHolder || !cardExpiry || !cardCvc) {
-      alert('Please fill in all requested payment credentials variables to authorize transaction.');
+      showToast('Please fill in all requested payment credentials variables to authorize transaction.', 'error');
       return;
     }
 
@@ -281,10 +289,10 @@ export default function PricingPage() {
           } catch(e) {}
 
         } else {
-          alert('Chargily payment processor declined transactions.');
+          showToast('Chargily payment processor declined transactions.', 'error');
         }
       } catch (err: any) {
-        alert(`Verification server issue: ${err.message}`);
+        showToast(`Verification server issue: ${err.message}`, 'error');
       } finally {
         setChargilyProcessing(false);
       }
@@ -1191,6 +1199,19 @@ export default function PricingPage() {
             setIsCryptoModalOpen(false);
           }}
         />
+      )}
+
+      {/* Floating custom toasts */}
+      {toast && (
+        <div key={toast.message} className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border shadow-xl flex items-center gap-2 max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-emerald-950/90 border-emerald-500/30 text-emerald-350' 
+            : toast.type === 'error' 
+            ? 'bg-rose-950/90 border-rose-500/30 text-rose-350' 
+            : 'bg-[#0a0c10]/95 border-border text-foreground'
+        }`}>
+          <span className="text-xs font-semibold leading-relaxed">{toast.message}</span>
+        </div>
       )}
     </div>
   );
