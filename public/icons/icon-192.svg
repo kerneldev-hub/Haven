@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
+  <defs>
+    <linearGradient id="pwa-grad-192" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#38bdf8" />
+      <stop offset="100%" stopColor="#0284c7" />
+    </linearGradient>
+    <linearGradient id="pwa-bg-192" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0f172a" />
+      <stop offset="100%" stopColor="#1e293b" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#pwa-bg-192)" stroke="rgba(255,255,255,0.08)" stroke-width="4" />
+  <path
+    d="M57 51V141"
+    stroke="url(#pwa-grad-192)"
+    stroke-width="16.8"
+    stroke-linecap="round"
+  />
+  <path
+    d="M135 51V141"
+    stroke="url(#pwa-grad-192)"
+    stroke-width="16.8"
+    stroke-linecap="round"
+  />
+  <path
+    d="M57 87L96 57L135 87"
+    stroke="url(#pwa-grad-192)"
+    stroke-width="15"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M57 114L96 84L135 114"
+    stroke="url(#pwa-grad-192)"
+    stroke-width="15"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

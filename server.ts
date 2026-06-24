@@ -13,6 +13,37 @@ import { createServer as createViteServer } from 'vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function startServer() {
+  // ─── Environment Validation & Warnings ─────────────────────────────────────────
+  console.log('\n================================================================');
+  console.log(' 🛡️  HAVEN ENVIRONMENT BOOTSTRAP AUDIT');
+  console.log('================================================================');
+  
+  const criticalEnv = ['DATABASE_URL', 'JWT_SECRET', 'APP_URL'];
+  const integrations = {
+    'Logto Auth': ['LOGTO_ENDPOINT', 'LOGTO_APP_ID', 'LOGTO_APP_SECRET'],
+    'Ably Realtime': ['ABLY_API_KEY'],
+    'Chargily Payment': ['CHARGILY_SECRET_KEY', 'CHARGILY_WEBHOOK_SECRET'],
+    'BTCPay Server': ['BTCPAY_SERVER_API_KEY', 'BTCPAY_SERVER_STORE_ID', 'BTCPAY_SERVER_URL'],
+  };
+
+  criticalEnv.forEach(key => {
+    if (!process.env[key]) {
+      console.warn(` ⚠️  CRITICAL ENV MISSING: "${key}" - Running with secure local defaults.`);
+    } else {
+      console.log(` ✓  CRITICAL ENV DETECTED: "${key}"`);
+    }
+  });
+
+  Object.entries(integrations).forEach(([name, keys]) => {
+    const missing = keys.filter(k => !process.env[k]);
+    if (missing.length > 0) {
+      console.log(` 🔌  ${name}: Running in Mock/Local mode (Missing: ${missing.join(', ')}).`);
+    } else {
+      console.log(` ✓  ${name}: Fully Configured & Active`);
+    }
+  });
+  console.log('================================================================\n');
+
   // ─── Database ─────────────────────────────────────────────────────────────────
   const libsqlClient = createClient({
     url: process.env.DATABASE_URL || 'file:local.db',
@@ -489,6 +520,28 @@ async function startServer() {
     }
 
     const invoiceId = generateId();
+
+    // Ensure the user exists in the database to prevent foreign key violations on payments insertion
+    try {
+      const userList = await db.select().from(schema.users).where(eq(schema.users.id, req.user.id)).limit(1);
+      if (userList.length === 0) {
+        if (process.env.NODE_ENV !== 'production' && req.user.id === 'dev-user-id') {
+          await db.insert(schema.users).values({
+            id: 'dev-user-id',
+            username: 'dev_user',
+            email: 'kernel.env@gmail.com',
+            displayName: 'Dev User',
+            role: 'admin',
+            tier: 'FREE',
+          });
+        } else {
+          return res.status(400).json({ error: 'Authenticated user not found in database. Please log in again.' });
+        }
+      }
+    } catch (dbErr: any) {
+      console.error('User validation failed in checkout:', dbErr.message);
+      return res.status(500).json({ error: 'Database verification failed' });
+    }
 
     try {
       if (paymentMethod === 'chargily') {

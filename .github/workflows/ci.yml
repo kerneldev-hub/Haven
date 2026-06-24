@@ -1,0 +1,42 @@
+name: "HAVEN Quality & Security CI"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality-and-security:
+    name: Code Quality & Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node.js Dependencies
+        run: npm ci
+
+      - name: Verify Code Quality & Type Safety (Linter)
+        run: npm run lint
+
+      - name: Perform Production Build Validation
+        run: npm run build
+
+      - name: Dependency Vulnerability Audit (Security Scan)
+        run: npm audit --audit-level=high || echo "Vulnerabilities found. Please review and update packages where possible."

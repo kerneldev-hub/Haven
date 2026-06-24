@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 32" fill="none">
+  <defs>
+    <linearGradient id="haven-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#38bdf8" />
+      <stop offset="100%" stopColor="#0284c7" />
+    </linearGradient>
+    <linearGradient id="haven-logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0f172a" />
+      <stop offset="100%" stopColor="#1e293b" />
+    </linearGradient>
+  </defs>
+  <!-- Logo Mark -->
+  <g transform="translate(0, 0)">
+    <rect width="32" height="32" rx="9" fill="url(#haven-logo-bg)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+    <path
+      d="M9.5 8.5V23.5"
+      stroke="url(#haven-logo-grad)"
+      stroke-width="2.8"
+      stroke-linecap="round"
+    />
+    <path
+      d="M22.5 8.5V23.5"
+      stroke="url(#haven-logo-grad)"
+      stroke-width="2.8"
+      stroke-linecap="round"
+    />
+    <path
+      d="M9.5 14.5L16 9.5L22.5 14.5"
+      stroke="url(#haven-logo-grad)"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M9.5 19L16 14L22.5 19"
+      stroke="url(#haven-logo-grad)"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+  <!-- Wordmark -->
+  <text
+    x="44"
+    y="22"
+    fill="#f8fafc"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="18"
+    font-weight="800"
+    letter-spacing="-0.05em"
+  >HAVEN</text>
+</svg>

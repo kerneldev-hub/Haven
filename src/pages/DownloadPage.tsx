@@ -28,7 +28,7 @@ interface ReleasesResponse {
   error?: string;
 }
 
-type Platform = 'windows' | 'linux' | 'android';
+type Platform = 'web' | 'windows' | 'macos' | 'linux' | 'android' | 'ios';
 
 interface PlatformTarget {
   platform: Platform;
@@ -43,6 +43,18 @@ interface PlatformTarget {
 
 const platforms: PlatformTarget[] = [
   {
+    platform: 'web',
+    label: 'Web Workspace (PWA)',
+    os: 'Modern Browser · Offline-First',
+    ext: [],
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 text-sky-400" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.4z"/>
+      </svg>
+    ),
+    description: 'Instant, serverless-capable progressive web application. Fully persistent local storage with zero install overhead.',
+  },
+  {
     platform: 'windows',
     label: 'Windows',
     os: 'Windows 10/11 · x64',
@@ -54,6 +66,19 @@ const platforms: PlatformTarget[] = [
     ),
     description: 'Native desktop app built with Tauri v2 for Windows 10 and Windows 11.',
     buildCommand: 'npm run tauri:build',
+  },
+  {
+    platform: 'macos',
+    label: 'macOS',
+    os: 'macOS 12+ · Apple Silicon / Intel',
+    ext: ['.dmg', '.app', '_mac', '_macos'],
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.2.67-2.92 1.49-.6.69-1.12 1.83-1 2.96 1.08.08 2.21-.55 2.93-1.39z"/>
+      </svg>
+    ),
+    description: 'Sovereign desktop client app for macOS. Fully compatible with Apple Silicon and Intel Chips.',
+    buildCommand: 'npm run tauri:build -- --target universal-apple-darwin',
   },
   {
     platform: 'linux',
@@ -78,8 +103,21 @@ const platforms: PlatformTarget[] = [
         <path d="M17.523 15.341c-.59 0-1.068-.478-1.068-1.068s.478-1.068 1.068-1.068 1.068.478 1.068 1.068-.478 1.068-1.068 1.068m-11.046 0c-.59 0-1.068-.478-1.068-1.068s.478-1.068 1.068-1.068 1.068.478 1.068 1.068-.478 1.068-1.068 1.068m11.405-6.411l2.127-3.682a.443.443 0 00-.162-.605.443.443 0 00-.605.162l-2.153 3.728A12.936 12.936 0 0012 8.029a12.936 12.936 0 00-5.089 1.503L4.758 5.805a.443.443 0 00-.605-.162.443.443 0 00-.162.605l2.127 3.682C3.644 11.52 2 14.09 2 17h20c0-2.91-1.644-5.48-4.118-7.07" fill="#3DDC84"/>
       </svg>
     ),
-    description: 'Sideloadable APK built with Capacitor v8. No Play Store required.',
+    description: 'Sideloadable APK built with Capacitor v8. No Google Play Store required.',
     installCommand: 'adb install haven-release.apk',
+  },
+  {
+    platform: 'ios',
+    label: 'iOS (iPhone / iPad)',
+    os: 'iOS 15+ · Safari PWA / Native',
+    ext: ['.ipa'],
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+        <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C3.12 15.65 4 8.71 9.29 8.55c1.4.04 2.16.81 3.01.81.82 0 1.95-.87 3.49-.71 1.44.15 2.53.74 3.1 1.63-2.97 1.74-2.5 5.61.1 6.78-.6 1.48-1.39 2.94-2.45 3.99zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.2 2.53-2.04 4.41-3.74 4.25z"/>
+      </svg>
+    ),
+    description: 'Runs as a fully sovereign web workspace. Add to Home Screen via iOS Safari for standalone offline execution.',
+    buildCommand: 'npm run build && npx cap add ios',
   },
 ];
 
@@ -100,6 +138,11 @@ export default function DownloadPage() {
   const [data, setData] = useState<ReleasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [detectedPlatform, setDetectedPlatform] = useState<Platform | 'unknown'>('unknown');
+  
+  // PWA Installation state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
 
   const fetchReleases = async () => {
     setLoading(true);
@@ -115,7 +158,49 @@ export default function DownloadPage() {
     }
   };
 
-  useEffect(() => { fetchReleases(); }, []);
+  const handleInstallPWA = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    try {
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setIsInstallable(false);
+      }
+    } catch (e) {
+      console.error('PWA prompt error:', e);
+    }
+  };
+
+  useEffect(() => { 
+    fetchReleases(); 
+
+    // Listen for PWA install prompt support
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.indexOf('win') !== -1) setDetectedPlatform('windows');
+    else if (ua.indexOf('mac') !== -1) {
+      if (ua.indexOf('iphone') !== -1 || ua.indexOf('ipad') !== -1 || ua.indexOf('ipod') !== -1) {
+        setDetectedPlatform('ios');
+      } else {
+        setDetectedPlatform('macos');
+      }
+    }
+    else if (ua.indexOf('linux') !== -1) {
+      if (ua.indexOf('android') !== -1) setDetectedPlatform('android');
+      else setDetectedPlatform('linux');
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
   const latestRelease = data?.releases?.[0] ?? null;
 
@@ -132,10 +217,33 @@ export default function DownloadPage() {
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6">
             Download Haven
           </h1>
-          <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-            Available for Windows, Linux, and Android. Built automatically via GitHub Actions
-            from the open-source repository.
+          <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
+            Available for Windows, macOS, Linux, Android, and iOS. Built automatically via automated
+            GitHub pipelines or easily installable as an offline-first progressive web application.
           </p>
+
+          {detectedPlatform !== 'unknown' && (
+            <div className="max-w-md mx-auto p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Auto-Detected Device</p>
+                  <p className="text-sm font-extrabold text-foreground">
+                    {detectedPlatform === 'windows' && 'Windows Desktop Client'}
+                    {detectedPlatform === 'macos' && 'macOS Native Client'}
+                    {detectedPlatform === 'linux' && 'Linux sovereign Desktop'}
+                    {detectedPlatform === 'android' && 'Android Portable Workstation'}
+                    {detectedPlatform === 'ios' && 'iOS Mobile Workspace'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-primary/10 text-primary animate-pulse shrink-0">
+                Suggested Match
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Release Status */}
@@ -219,34 +327,66 @@ export default function DownloadPage() {
         )}
 
         {/* Platform download cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-16">
           {platforms.map((p) => {
             const assets = latestRelease ? matchAssets(latestRelease.assets, p.ext) : [];
             const hasAssets = assets.length > 0;
+            const isMatch = detectedPlatform === p.platform;
 
             return (
               <div
                 key={p.platform}
-                className="flex flex-col border border-border bg-card/60 backdrop-blur rounded-2xl p-6 hover:border-border/80 hover:-translate-y-1 transition-all duration-300"
+                className={`flex flex-col border rounded-2xl p-5 hover:-translate-y-1 transition-all duration-300 relative ${
+                  isMatch
+                    ? 'border-primary/50 bg-primary/[0.03] shadow-md shadow-primary/5'
+                    : 'border-border bg-card/60 backdrop-blur hover:border-border/80'
+                }`}
               >
+                {isMatch && (
+                  <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-black uppercase tracking-wider animate-pulse">
+                    Your Device
+                  </span>
+                )}
+
                 <div className="flex items-start justify-between mb-5">
-                  <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center text-foreground">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    isMatch ? 'bg-primary/15 text-primary' : 'bg-muted/50 text-foreground'
+                  }`}>
                     {p.icon}
                   </div>
-                  {hasAssets ? (
+                  {p.platform === 'web' ? (
+                    <Badge className="text-[10px] bg-sky-500/10 text-sky-400 border-sky-500/20">Instant</Badge>
+                  ) : hasAssets ? (
                     <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Available</Badge>
                   ) : (
-                    <Badge className="text-[10px] bg-muted text-muted-foreground border-transparent">
-                      {loading ? 'Checking...' : 'Build Required'}
+                    <Badge className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">
+                      Coming soon
                     </Badge>
                   )}
                 </div>
 
                 <h3 className="font-bold text-base mb-1">{p.label}</h3>
-                <p className="text-xs text-muted-foreground mb-1 font-mono">{p.os}</p>
+                <p className="text-[10px] text-muted-foreground mb-1 font-mono">{p.os}</p>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-5 flex-1">{p.description}</p>
 
-                {hasAssets ? (
+                {p.platform === 'web' ? (
+                  <div className="space-y-2 mt-auto">
+                    {isInstallable ? (
+                      <button
+                        onClick={handleInstallPWA}
+                        className="flex items-center justify-between w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-bold gap-2 shadow-md shadow-primary/10 hover:scale-[1.02]"
+                      >
+                        <span className="truncate">Install Web App</span>
+                        <Download className="w-4 h-4 shrink-0" />
+                      </button>
+                    ) : (
+                      <div className="p-3 bg-muted/40 border border-border/50 rounded-xl text-left text-[10px] text-muted-foreground">
+                        <span className="font-bold text-foreground block mb-1">To Add PWA:</span>
+                        Tap your browser menu and select <span className="text-foreground font-semibold">"Install"</span> or <span className="text-foreground font-semibold">"Add to Home Screen"</span>.
+                      </div>
+                    )}
+                  </div>
+                ) : hasAssets ? (
                   <div className="space-y-2">
                     {assets.map((asset) => (
                       <a
@@ -263,20 +403,13 @@ export default function DownloadPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-border rounded-xl p-4 text-center">
+                  <div className="border border-dashed border-border rounded-xl p-4 text-center mt-auto bg-muted/20">
+                    <p className="text-[10px] font-bold text-amber-500 mb-2 uppercase tracking-wide">Roadmap Target</p>
                     {p.buildCommand && (
-                      <div className="mb-3">
-                        <p className="text-xs text-muted-foreground mb-2">Build locally:</p>
-                        <code className="text-xs font-mono bg-muted/50 px-3 py-1.5 rounded-lg text-foreground block">
+                      <div className="mb-3 text-left">
+                        <p className="text-[9px] text-muted-foreground mb-1">Compile manually:</p>
+                        <code className="text-[9px] font-mono bg-background px-2 py-1 rounded text-foreground block truncate">
                           {p.buildCommand}
-                        </code>
-                      </div>
-                    )}
-                    {p.installCommand && (
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-2">After download:</p>
-                        <code className="text-xs font-mono bg-muted/50 px-3 py-1.5 rounded-lg text-foreground block">
-                          {p.installCommand}
                         </code>
                       </div>
                     )}
@@ -284,11 +417,10 @@ export default function DownloadPage() {
                       href={`https://github.com/dzlab/haven/actions`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-primary hover:underline transition-all"
                     >
-                      <Github className="w-3.5 h-3.5" />
-                      Check pipeline
-                      <ExternalLink className="w-3 h-3 opacity-50" />
+                      <Github className="w-3 h-3" />
+                      Pipeline Status ↗
                     </a>
                   </div>
                 )}

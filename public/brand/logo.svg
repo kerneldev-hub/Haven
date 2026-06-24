@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 32" fill="none">
+  <defs>
+    <linearGradient id="logo-grad-horiz" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0284c7" />
+      <stop offset="100%" stopColor="#0369a1" />
+    </linearGradient>
+    <linearGradient id="bg-grad-horiz" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0f172a" />
+      <stop offset="100%" stopColor="#1e293b" />
+    </linearGradient>
+  </defs>
+  <!-- Logo Mark -->
+  <g transform="translate(0, 0)">
+    <rect width="32" height="32" rx="9" fill="url(#bg-grad-horiz)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+    <path
+      d="M9 21V11M9 16H17M17 21V11M23 11C23 11 25 12.5 25 16C25 19.5 23 21 23 21"
+      stroke="url(#logo-grad-horiz)"
+      stroke-width="2.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+  <!-- Wordmark -->
+  <text
+    x="44"
+    y="22"
+    fill="#f8fafc"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="18"
+    font-weight="800"
+    letter-spacing="-0.05em"
+  >HAVEN</text>
+</svg>

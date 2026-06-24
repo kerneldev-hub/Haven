@@ -1,0 +1,92 @@
+name: "HAVEN Release Compilation Pipeline"
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compile-desktop:
+    name: Compile (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust Dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux System Dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Node.js Dependencies
+        run: npm ci
+
+      - name: Build Web Frontend (Aesthetic Asset Prep)
+        run: npm run build
+
+      - name: Compile Desktop App Binaries (Tauri Build)
+        run: npm run tauri:build
+
+      - name: Locate & Package Built Binaries (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/binaries
+          # Locate built Debian package and AppImage
+          find src-tauri/target/release/bundle/deb/ -name "*.deb" -exec cp {} dist/binaries/ \; || true
+          find src-tauri/target/release/bundle/appimage/ -name "*.AppImage" -exec cp {} dist/binaries/ \; || true
+          echo "Linux binaries prepared."
+
+      - name: Locate & Package Built Binaries (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/binaries
+          # Locate built MSI and EXE files
+          find src-tauri/target/release/bundle/msi/ -name "*.msi" -exec cp {} dist/binaries/ \; || true
+          find src-tauri/target/release/bundle/nsis/ -name "*.exe" -exec cp {} dist/binaries/ \; || true
+          echo "Windows binaries prepared."
+
+      - name: Upload Compilation Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: haven-binaries-${{ matrix.platform }}
+          path: dist/binaries/*
+          if-no-files-found: warn
+
+      - name: Upload Binaries to Tagged Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/binaries/*
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

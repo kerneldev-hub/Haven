@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Terminal, Github, MessageSquare, Shield, Zap, Blocks, Bot, CheckCircle2, ChevronRight, X, Sparkles, Code2, Cpu, Globe, Lock as Locks, Search, Layout, Monitor, Apple, TerminalSquare, Smartphone } from 'lucide-react';
 import { Button } from '../components/ui/components';
 import IntegratesWithEcosystem from '../components/IntegratesWithEcosystem';
+import { HavenLogo } from '../components/layout/HavenLogo';
 
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = React.useState<number | null>(null);
@@ -571,8 +572,6 @@ export default function LandingPage() {
 
 function HavenLogoIcon() {
   return (
-    <div className="flex items-center justify-center w-5 h-5 rounded-md bg-foreground text-background">
-      <Blocks className="w-3 h-3" />
-    </div>
+    <HavenLogo size={18} />
   )
 }

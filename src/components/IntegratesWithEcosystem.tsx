@@ -20,10 +20,25 @@ const integrations: Integration[] = [
   { name: "Firebase", slug: "firebase", url: "https://firebase.google.com" },
   { name: "Supabase", slug: "supabase", url: "https://supabase.com" },
   { name: "Microsoft", slug: "microsoft", url: "https://www.microsoft.com" },
-  { name: "Oracle", slug: "oracle", url: "https://www.oracle.com" },
   { name: "Resend", slug: "resend", url: "https://resend.com" },
   { name: "Windows", slug: "windows", url: "https://www.microsoft.com/windows" }
 ];
+
+function getCustomLogo(slug: string) {
+  if (slug === 'windows' || slug === 'microsoft') {
+    return (
+      <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300">
+        <svg viewBox="0 0 23 23" className="h-6 w-6 fill-current text-muted-foreground/75 group-hover:text-[#0078d4] transition-colors" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0h11v11H0zM12 0h11v11H12zM0 12h11v11H0zM12 12h11v11H12z" />
+        </svg>
+        <span className="text-[14px] font-semibold text-muted-foreground group-hover:text-foreground font-sans tracking-tight">
+          {slug === 'windows' ? 'Windows' : 'Microsoft'}
+        </span>
+      </div>
+    );
+  }
+  return null;
+}
 
 export default function IntegratesWithEcosystem() {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -40,7 +55,7 @@ export default function IntegratesWithEcosystem() {
       <div className="absolute inset-0 bg-transparent bg-[radial-gradient(100%_100%_at_50%_0%,rgba(255,255,255,0.02)_0%,transparent_100%)] pointer-events-none"></div>
       <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10">
         <p className="text-center text-xs font-bold text-muted-foreground mb-8 tracking-widest uppercase">
-          Integrates with your ecosystem
+          Built using & compatible with
         </p>
         
         <div className="w-full relative">
@@ -71,7 +86,9 @@ export default function IntegratesWithEcosystem() {
                         </div>
                         
                         {/* Fallback styling vs. Logo display */}
-                        {isFailed ? (
+                        {getCustomLogo(item.slug) ? (
+                          getCustomLogo(item.slug)
+                        ) : isFailed ? (
                           <span className="text-sm font-semibold text-muted-foreground hover:text-foreground font-mono tracking-tight px-3 py-1 bg-white/5 border border-white/15 rounded-xl block shadow-inner">
                             {item.name}
                           </span>

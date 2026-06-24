@@ -1,18 +1,41 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Haven Sovereign Workspace Network</title>
-    <!-- PWA configuration link headers -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- SEO Primary Metadata -->
+    <title>HAVEN — AI Platform for Communities, Knowledge and Creation</title>
+    <meta name="description" content="Sovereign desktop and mobile workspace. Real-time secure team collaboration, local-first artificial intelligence, and fair collaborative economy." />
+    <meta name="keywords" content="sovereign workspace, artificial intelligence, local-first ai, team collaboration, secure communication, real-time community" />
+    <meta name="author" content="Haven OS Network" />
+    <meta name="robots" content="index, follow" />
+    
+    <!-- PWA configuration headers -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0284c7" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Haven" />
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2'%3E%3Cpolygon points='12 2 2 22 22 22'/%3E%3C/svg%3E" />
+    
+    <!-- Brand Asset Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/favicon.svg" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="HAVEN — AI Platform for Communities, Knowledge and Creation" />
+    <meta property="og:description" content="Secure, offline-capable sovereign workspace. Empowering teams with local-first artificial intelligence and real-time collaborative modules." />
+    <meta property="og:image" content="/logos/haven-logo.svg" />
+    <meta property="og:site_name" content="Haven OS" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HAVEN — AI Platform for Communities, Knowledge and Creation" />
+    <meta name="twitter:description" content="Secure, offline-capable sovereign workspace with local-first artificial intelligence." />
+    <meta name="twitter:image" content="/logos/haven-logo.svg" />
   </head>
-  <body>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
