@@ -1,54 +1,47 @@
-import React, { ReactNode } from "react";
-import { AlertTriangle, Home, RefreshCw } from "lucide-react";
-import { Button } from "./components";
-import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from "react-error-boundary";
+import React from 'react';
 
-function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4">
-      <div className="max-w-md w-full bg-card border shadow-sm rounded-xl p-8 flex flex-col items-center text-center">
-         <div className="w-12 h-12 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6">
-            <AlertTriangle className="w-6 h-6" />
-         </div>
-         <h1 className="text-xl font-bold mb-2">Something went wrong</h1>
-         <p className="text-muted-foreground text-sm mb-6">
-           An unexpected error occurred. Our engineering team has been notified.
-         </p>
-         <div className="flex flex-col sm:flex-row gap-3 w-full">
-            <Button 
-               variant="default" 
-               className="w-full"
-               onClick={resetErrorBoundary}
-            >
-               <RefreshCw className="w-4 h-4 mr-2" /> Try Again
-            </Button>
-            <Button 
-               variant="outline" 
-               className="w-full"
-               onClick={() => window.location.href = '/'}
-            >
-               <Home className="w-4 h-4 mr-2" /> Return Home
-            </Button>
-         </div>
-         {process.env.NODE_ENV === "development" && (
-            <div className="mt-8 p-4 bg-muted rounded-md w-full text-left overflow-auto border border-border/50 max-h-48 text-xs font-mono text-muted-foreground">
-               {error.toString()}
-            </div>
-         )}
-      </div>
-    </div>
-  );
+interface Props {
+  children: React.ReactNode;
 }
 
-export function ErrorBoundary({ children }: { children: ReactNode }) {
-  return (
-    <ReactErrorBoundary 
-      FallbackComponent={ErrorFallback}
-      onReset={() => {
-        // Reset the state of your app so the error doesn't happen again
-      }}
-    >
-      {children}
-    </ReactErrorBoundary>
-  );
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends React.Component<Props, State> {
+  public props: Props;
+  public state: State = { hasError: false, error: null };
+
+  constructor(props: Props) {
+    super(props);
+    this.props = props;
+  }
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+            <span className="text-destructive text-xl font-bold">!</span>
+          </div>
+          <h2 className="text-xl font-bold mb-2">Something went wrong</h2>
+          <p className="text-muted-foreground text-sm mb-6 max-w-md">
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

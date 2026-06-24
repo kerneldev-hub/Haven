@@ -1,35 +1,34 @@
 import React from 'react';
 
-interface HavenLogoProps {
-  className?: string;
+interface Props {
   size?: number;
   showWordmark?: boolean;
+  className?: string;
 }
 
-export function HavenLogo({ className = '', size = 28, showWordmark = false }: HavenLogoProps) {
+export function HavenLogo({ size = 24, showWordmark = false, className = '' }: Props) {
   return (
-    <div className={`inline-flex items-center gap-2.5 ${className}`}>
-      <div className="relative flex items-center justify-center">
-        <div className="absolute inset-0 bg-primary/20 blur-[10px] rounded-full scale-150"></div>
-        <svg
-          width={size}
-          height={size}
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="text-foreground shrink-0 relative z-10 transition-transform group-hover:scale-110 duration-300"
-        >
-          <path 
-            fillRule="evenodd" 
-            clipRule="evenodd" 
-            d="M12 2L2 7V17L12 22L22 17V7L12 2ZM4 8.2V16L12 20V12.2L4 8.2ZM14 20L22 16V8.2L14 12.2V20ZM20 7.1L12 3.1L4 7.1L12 11.1L20 7.1Z" 
-            fill="currentColor"
-          />
-        </svg>
-      </div>
+    <div className={`flex items-center gap-2.5 ${className}`}>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 32 32"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-label="Haven logo"
+      >
+        <rect width="32" height="32" rx="8" className="fill-primary/10" />
+        <path
+          d="M8 22V10M8 16H16M16 22V10M22 10C22 10 24 12 24 16C24 20 22 22 22 22"
+          className="stroke-primary"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
       {showWordmark && (
-        <span className="font-extrabold tracking-tighter text-foreground uppercase text-xl mt-0.5">
-          HAVEN
+        <span className="font-extrabold text-foreground tracking-tight" style={{ fontSize: `${size * 0.65}px` }}>
+          Haven
         </span>
       )}
     </div>

@@ -1,820 +1,890 @@
 import express from 'express';
-import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import cookieParser from 'cookie-parser';
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
-import * as schema from './src/db/schema.js';
+import { eq, desc, and, count } from 'drizzle-orm';
+import * as schema from './src/db/schema';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import cookieParser from 'cookie-parser';
-import { eq, desc, and } from 'drizzle-orm';
-import { z } from 'zod';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createServer as createViteServer } from 'vite';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function startServer() {
-  const app = express();
-  app.use(express.json());
-  app.use(cookieParser());
-
-  // STEP 6C: Security Headers Middleware (CSP, X-Content-Type-Options, etc.)
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'self' data: https:; script-src 'self' 'unsafe-eval' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio https://*.ai.studio;"
-    );
-    next();
-  });
-
-  // STEP 10C: API Request Instrumentation & Audit Logging
-  app.use((req: any, res: any, next: any) => {
-    const start = Date.now();
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-    const ua = req.headers['user-agent'] || 'Unknown-UA';
-    res.on('finish', () => {
-      // Only log actual API routes to prevent clogging standard out and matching static files containing 'error' substrings
-      if (req.path.startsWith('/api/')) {
-        const duration = Date.now() - start;
-        console.log(`[API ACCESS LOG] ${req.method} ${req.path} -> Status: ${res.statusCode} | ${duration}ms | IP: ${ip} | UA: ${ua}`);
-      }
-    });
-    next();
-  });
-
-  // STEP 6A: Double-Submit Cookie CSRF Prevention Engine
-  app.get('/api/auth/csrf-token', (req, res) => {
-    const csrfToken = crypto.randomBytes(24).toString('hex');
-    // Set cookie lax, readable on frontend
-    res.cookie('haven_csrf', csrfToken, { 
-      httpOnly: false, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax' 
-    });
-    res.json({ csrfToken });
-  });
-
-  const csrfProtection = (req: any, res: any, next: any) => {
-    if (['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(req.method)) {
-      return next();
-    }
-    // Exclude webhooks as they are triggered by third-parties and verified via SHA255 HMAC of body
-    if (req.path === '/api/payments/webhook') {
-      return next();
-    }
-    const csrfHeader = req.headers['x-csrf-token'];
-    const csrfCookie = req.cookies?.haven_csrf;
-    if (!csrfCookie || csrfHeader !== csrfCookie) {
-      return res.status(403).json({ error: 'CSRF token validation failed. Access Denied.' });
-    }
-    next();
-  };
-  
-  const PORT = 3000;
-  
-  // Database Setup
-  const sqlClient = createClient({
+  // ─── Database ─────────────────────────────────────────────────────────────────
+  const libsqlClient = createClient({
     url: process.env.DATABASE_URL || 'file:local.db',
-    authToken: process.env.DATABASE_AUTH_TOKEN
+    authToken: process.env.DATABASE_AUTH_TOKEN,
   });
-  const db = drizzle(sqlClient, { schema });
+  const db = drizzle(libsqlClient, { schema });
 
-  // Sync basic schema for dev locally with cascade constraints and indices (STEP 10A)
+  // Enable SQLite foreign key support
   try {
-    await sqlClient.execute(`PRAGMA foreign_keys = ON;`);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id text PRIMARY KEY,
-        username text NOT NULL,
-        email text NOT NULL,
-        avatar_url text,
-        tier text NOT NULL DEFAULT 'FREE',
-        created_at integer DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS payments (
-        id text PRIMARY KEY,
-        user_id text NOT NULL,
-        provider text NOT NULL,
-        method text NOT NULL,
-        amount integer NOT NULL,
-        currency text NOT NULL,
-        transaction_id text NOT NULL,
-        status text NOT NULL,
-        created_at integer DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS subscriptions (
-        id text PRIMARY KEY,
-        user_id text NOT NULL,
-        plan_id text NOT NULL,
-        status text NOT NULL,
-        start_date integer DEFAULT CURRENT_TIMESTAMP,
-        end_date integer NOT NULL,
-        amount_paid integer NOT NULL,
-        currency text NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS audit_logs (
-        id text PRIMARY KEY,
-        invoice_id text NOT NULL,
-        user_id text NOT NULL,
-        event text NOT NULL,
-        message text NOT NULL,
-        metadata text,
-        timestamp integer DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id text PRIMARY KEY,
-        user_id text NOT NULL,
-        name text NOT NULL,
-        description text,
-        status text NOT NULL DEFAULT 'active',
-        created_at integer DEFAULT CURRENT_TIMESTAMP,
-        updated_at integer DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `);
-    await sqlClient.execute(`
-      CREATE TABLE IF NOT EXISTS files (
-        id text PRIMARY KEY,
-        project_id text NOT NULL,
-        name text NOT NULL,
-        path text NOT NULL,
-        type text NOT NULL,
-        content text,
-        created_at integer DEFAULT CURRENT_TIMESTAMP,
-        updated_at integer DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-      );
-    `);
-
-    // Create secure indices (STEP 10A)
-    await sqlClient.execute(`CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp);`);
-    await sqlClient.execute(`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id);`);
-  } catch(err) {
-    console.error("DB Init error", err);
+    await libsqlClient.execute(`PRAGMA foreign_keys = ON;`);
+  } catch (err) {
+    console.error('Failed to enable foreign keys:', err);
   }
 
-  // Initialize standard Gemini client
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
+  // ─── App Setup ────────────────────────────────────────────────────────────────
+  const app = express();
+  app.use(express.json({ limit: '2mb' }));
+  app.use(cookieParser());
 
-  // Rate Limiter
-  const requestCounts = new Map<string, { count: number, resetTime: number }>();
-  const rateLimiter = (limit: number, windowMs: number) => {
-    return (req: any, res: any, next: any) => {
-      const ip = req.ip || req.connection.remoteAddress || '127.0.0.1';
-      const now = Date.now();
-      let record = requestCounts.get(ip);
-      
-      if (!record || now > record.resetTime) {
-        record = { count: 0, resetTime: now + windowMs };
-      }
-      
-      record.count++;
-      requestCounts.set(ip, record);
-      
-      if (record.count > limit) {
-        return res.status(429).json({ error: 'Too many requests, slow down.' });
-      }
-      next();
-    };
-  };
-
-  // Releases dynamic query endpoint (with 5-minute cache)
-  let cachedReleaseData: { timestamp: number, payload: any } | null = null;
-  app.get('/api/releases/latest', async (req, res) => {
-    const fallbackAssets = [
-      {
-        name: 'haven-desktop-setup_x64.exe',
-        fileName: 'haven-desktop-setup_x64.exe',
-        fileSize: '32.4 MB',
-        downloadUrl: 'https://github.com/dzlab/haven/releases/download/v1.0.0/haven-desktop-setup_x64.exe',
-        checksum: 'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce'
-      },
-      {
-        name: 'haven-desktop.AppImage',
-        fileName: 'haven-desktop.AppImage',
-        fileSize: '38.1 MB',
-        downloadUrl: 'https://github.com/dzlab/haven/releases/download/v1.0.0/haven-desktop.AppImage',
-        checksum: 'f33e839e995e84af311fb924e2310100d60de4020e5015dc8008a920d36caace'
-      },
-      {
-        name: 'haven-mobile.apk',
-        fileName: 'haven-mobile.apk',
-        fileSize: '18.7 MB',
-        downloadUrl: 'https://github.com/dzlab/haven/releases/download/v1.0.0/haven-mobile.apk',
-        checksum: 'a53e839e125e84bf311fb924e2310100d60de4020e5015dc8008a920d36ce9bb'
-      }
+  // CORS — allow frontend origin
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || '';
+    const allowed = [
+      process.env.APP_URL || 'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5174',
     ];
-
-    try {
-      const now = Date.now();
-      if (cachedReleaseData && (now - cachedReleaseData.timestamp) < 5 * 60 * 1000) {
-        console.log("[GITHUB RELEASES API] Returning cached data");
-        return res.json(cachedReleaseData.payload);
-      }
-
-      const repoPath = process.env.GITHUB_REPOSITORY || 'dzlab/haven';
-      console.log(`[GITHUB RELEASES API] Inquiring releases for: ${repoPath}`);
-      
-      const githubUrl = `https://api.github.com/repos/${repoPath}/releases/latest`;
-      const response = await fetch(githubUrl, {
-        headers: {
-          'User-Agent': 'haven-os-client',
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.log(`[GITHUB RELEASES API] Info: Checked ${repoPath}. No public releases published yet (status 404). Returning high-fidelity production fallbacks.`);
-          const payload = {
-            error: false,
-            isEmpty: false,
-            isDemoFallback: true,
-            message: 'Awaiting deployment build. Showing automated pipeline build mocks.',
-            repoPath,
-            repoUrl: `https://github.com/${repoPath}`,
-            tagName: 'v1.0.0-beta.1',
-            htmlUrl: `https://github.com/${repoPath}/releases`,
-            assets: fallbackAssets
-          };
-          return res.json(payload);
-        }
-        throw new Error(`GitHub releases API returned status ${response.status}`);
-      }
-
-      const rawRelease = await response.json();
-      const tagName = rawRelease.tag_name;
-      const htmlUrl = rawRelease.html_url;
-      const assets = rawRelease.assets || [];
-
-      if (!assets || assets.length === 0) {
-        console.log(`[GITHUB RELEASES API] Info: Release has 0 assets. Returning premium pipeline fallbacks.`);
-        const payload = {
-          error: false,
-          isEmpty: false,
-          isDemoFallback: true,
-          message: 'Release assets empty. Showing automated pipeline build mocks.',
-          repoPath,
-          repoUrl: `https://github.com/${repoPath}`,
-          tagName: tagName || 'v1.0.0-beta.1',
-          htmlUrl,
-          assets: fallbackAssets
-        };
-        return res.json(payload);
-      }
-
-      // Check if SHA256SUMS.txt exists in assets list
-      const sumAsset = assets.find((a: any) => a.name === 'SHA256SUMS.txt');
-      const checksumsMap: { [key: string]: string } = {};
-
-      if (sumAsset) {
-        try {
-          console.log(`[GITHUB RELEASES API] Downloading SHA256SUMS.txt from ${sumAsset.browser_download_url}`);
-          const txtRes = await fetch(sumAsset.browser_download_url, {
-            headers: { 'User-Agent': 'haven-os-client' }
-          });
-          if (txtRes.ok) {
-            const txt = await txtRes.text();
-            const lines = txt.split('\n');
-            for (const line of lines) {
-              const matched = line.trim().match(/^([a-fA-F0-9]{64})\s+\*?(.+)$/);
-              if (matched) {
-                const [_, hash, filename] = matched;
-                checksumsMap[filename.trim()] = hash.trim();
-              }
-            }
-            console.log("[GITHUB RELEASES API] Parsed checksums map successfully", checksumsMap);
-          }
-        } catch (checksumErr) {
-          console.warn("[GITHUB RELEASES API] Note: Could not parse index checksums", checksumErr);
-        }
-      }
-
-      // Map assets to a standardized dynamic structure format
-      const mappedAssets = assets
-        .filter((a: any) => a.name !== 'SHA256SUMS.txt')
-        .map((a: any) => {
-          const bytes = a.size;
-          const mbSize = (bytes / (1024 * 1024)).toFixed(1);
-          return {
-            name: a.name,
-            fileName: a.name,
-            fileSize: `${mbSize} MB`,
-            downloadUrl: a.browser_download_url,
-            checksum: checksumsMap[a.name] || 'N/A'
-          };
-        });
-
-      const payload = {
-        repoPath,
-        repoUrl: `https://github.com/${repoPath}`,
-        tagName,
-        htmlUrl,
-        assets: mappedAssets.length > 0 ? mappedAssets : fallbackAssets,
-        isDemoFallback: mappedAssets.length === 0
-      };
-
-      cachedReleaseData = { timestamp: now, payload };
-      res.json(payload);
-    } catch (e: any) {
-      console.log("[GITHUB RELEASES API] Info: Releases fetch encountered an error. Applying premium fallbacks.", e.message || e);
-      // Fallback state payload returning real repo config, let page show fallbacks gracefully
-      const repoPath = process.env.GITHUB_REPOSITORY || 'dzlab/haven';
-      res.status(200).json({
-        error: false,
-        isDemoFallback: true,
-        message: e.message || 'GitHub connection offline.',
-        repoPath,
-        repoUrl: `https://github.com/${repoPath}`,
-        tagName: 'v1.0.0-beta.1',
-        htmlUrl: `https://github.com/${repoPath}/releases`,
-        assets: fallbackAssets
-      });
+    if (allowed.includes(origin) || !origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-CSRF-Token');
     }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
   });
 
-  // Chat API route
-  app.post('/api/chat', rateLimiter(10, 60000), async (req, res) => {
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
+  function generateId(): string {
+    return crypto.randomUUID();
+  }
+
+  function hmacSign(payload: string, secret: string): string {
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  }
+
+  function verifyChargilyWebhook(payload: string, signature: string): boolean {
+    const secret = process.env.CHARGILY_WEBHOOK_SECRET;
+    if (!secret) return false;
+    const expected = hmacSign(payload, secret);
     try {
-      const { messages, systemInstruction } = req.body;
-      if (!messages || !Array.isArray(messages)) {
-        return res.status(400).json({ error: 'Messages array is required' });
-      }
-
-      if (messages.length === 0) {
-        return res.status(400).json({ error: 'Messages array cannot be empty' });
-      }
-
-      const history = messages.slice(0, -1).map((m: any) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
-
-      const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction: systemInstruction || "You are Haven AI, an intelligent, sovereign community operations assistant for builders, creators, developers, and gamers. Answer questions clearly, precisely, and with engineering authority.",
-        },
-        history: history
-      });
-
-      const lastMessage = messages[messages.length - 1];
-      const result = await chat.sendMessage({ message: lastMessage.content });
-
-      res.json({ content: result.text || '' });
-    } catch (error: any) {
-      console.error('Error calling Gemini API:', error);
-      res.status(500).json({ error: error?.message || 'Failed to generate response' });
+      return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+    } catch {
+      return false;
     }
-  });
+  }
 
-  const addAuditLog = async (invoiceId: string, userId: string, event: 'initiated' | 'verified' | 'failed' | 'refunded', message: string, metadata?: any) => {
+  function verifyBtcPayWebhook(payload: string, signature: string): boolean {
+    const secret = process.env.BTCPAY_WEBHOOK_SECRET;
+    if (!secret) return false;
+    const expected = hmacSign(payload, secret);
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+    } catch {
+      return false;
+    }
+  }
+
+  // Session middleware: validate JWT from cookie
+  function requireAuth(req: any, res: any, next: any) {
+    const token = req.cookies['haven_session'] || req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      // Graceful fallback: if in development and Logto isn't fully configured, bypass for local play
+      if (process.env.NODE_ENV !== 'production' && (!process.env.LOGTO_ENDPOINT || process.env.LOGTO_ENDPOINT.includes('your-tenant-id'))) {
+        req.user = { id: 'dev-user-id', username: 'dev_user', email: 'kernel.env@gmail.com', role: 'admin', tier: 'PRO' };
+        return next();
+      }
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+      const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+      req.user = jwt.verify(token, secret) as any;
+      next();
+    } catch {
+      res.status(401).json({ error: 'Invalid or expired session' });
+    }
+  }
+
+  function requireAdmin(req: any, res: any, next: any) {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    next();
+  }
+
+  const addAuditLog = async (invoiceId: string, userId: string, event: 'initiated' | 'verified' | 'failed' | 'refunded' | 'admin_override', message: string, metadata?: any) => {
     try {
       await db.insert(schema.auditLogs).values({
-        id: `log-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 10)}`,
+        id: generateId(),
         invoiceId,
         userId,
         event,
         message,
         metadata: metadata ? JSON.stringify(metadata) : null,
-        timestamp: new Date()
       });
-      console.log(`[PAYMENT AUDIT LOG] Registered event: ${event.toUpperCase()} for user @${userId} | ${message}`);
-    } catch(err) {
-      console.error("Audit log error:", err);
+    } catch (err) {
+      console.error('Audit log failed:', err);
     }
   };
 
-  const JWT_SECRET = process.env.JWT_SECRET || 'HAVEN_ORCHESTRATOR_EDGE_FALLBACK_SECRET_39X2';
+  // ─── Auth Routes ──────────────────────────────────────────────────────────────
 
-  // Request Validator Schemas (STEP 6A & 6C)
-  const checkoutBodySchema = z.object({
-    planId: z.enum(['PRO', 'TEAM', 'ENTERPRISE', 'FREE']),
-    paymentMethod: z.enum(['chargily', 'crypto', 'global']),
-    currency: z.string().default('USD'),
-    amount: z.union([z.number(), z.string()]),
-    email: z.string().email().optional(),
-    userId: z.string()
-  });
+  // Logto OIDC callback — handles Google, GitHub, GitLab, Microsoft
+  app.get('/api/auth/callback', async (req, res) => {
+    const { code, state, error } = req.query;
+    if (error) return res.redirect(`/login?error=${error}`);
+    if (!code) return res.redirect('/login?error=missing_code');
 
-  const verifyBodySchema = z.object({
-    invoiceId: z.string()
-  });
-
-  const adminActionBodySchema = z.object({
-    paymentId: z.string(),
-    action: z.enum(['confirm', 'reject', 'refund']),
-    reason: z.string().optional()
-  });
-
-  // Format Helper matching requirements
-  const apiResponse = (source: string, data: any, status: 'ok' | 'degraded' | 'offline' = 'ok') => ({
-    status,
-    source,
-    data,
-    timestamp: Date.now()
-  });
-
-  // JWT Validation Middleware
-  const authenticateToken = (req: any, res: any, next: any) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader?.split(' ')[1] || req.cookies?.haven_token;
-
-    if (!token) {
-      // Allow bypass for mock local environment, but flag as degraded auth
-      req.user = { id: 'user_1', username: 'gamerdzbba7', tier: 'PRO', isAdmin: true };
-      return next(); 
-    }
-
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) return res.status(403).json(apiResponse('cache', null, 'degraded'));
-      req.user = user;
-      next();
-    });
-  };
-
-  // Auth Provider
-  app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body;
-    // Mock user login
-    const user = { id: 'user_1', username: 'gamerdzbba7', tier: 'PRO', isAdmin: true };
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
-    
-    // Also set http-only cookie (not actually secure in this playground environment without https/secure strict)
-    res.cookie('haven_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-    res.json(apiResponse('turso', { token, user }));
-  });
-
-  // Auth simulation for ProtectedRoute
-  app.get('/api/auth/me', authenticateToken, (req: any, res: any) => {
-    res.json(req.user);
-  });
-
-  // -------------------------------------------------------------
-  // PROJECT WORKSPACE AND IDE SYSTEM APIS
-  // -------------------------------------------------------------
-  
-  app.get('/api/projects', authenticateToken, async (req: any, res: any) => {
     try {
-      const allProjects = await db.select().from(schema.projects).where(eq(schema.projects.userId, req.user.id));
-      res.json(apiResponse('turso', allProjects));
-    } catch (err: any) {
-      res.status(500).json(apiResponse('turso', { error: err.message }, 'degraded'));
-    }
-  });
-
-  app.post('/api/projects', authenticateToken, async (req: any, res: any) => {
-    try {
-      const { name, description } = req.body;
-      const newProjectId = `proj-${Date.now()}`;
-      await db.insert(schema.projects).values({
-        id: newProjectId,
-        userId: req.user.id,
-        name: name || 'Untitled Workspace',
-        description: description || ''
+      // Exchange code with Logto token endpoint
+      const tokenUrl = `${process.env.LOGTO_ENDPOINT}/oidc/token`;
+      const params = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code as string,
+        redirect_uri: `${process.env.APP_URL}/api/auth/callback`,
+        client_id: process.env.LOGTO_APP_ID!,
+        client_secret: process.env.LOGTO_APP_SECRET!,
       });
-      res.json(apiResponse('turso', { id: newProjectId }));
-    } catch (err: any) {
-      res.status(500).json(apiResponse('turso', { error: err.message }, 'degraded'));
-    }
-  });
 
-  app.get('/api/projects/:projectId/files', authenticateToken, async (req: any, res: any) => {
-    try {
-      const projectFiles = await db.select().from(schema.files).where(
-        eq(schema.files.projectId, req.params.projectId)
-      );
-      res.json(apiResponse('turso', projectFiles));
-    } catch (err: any) {
-      res.status(500).json(apiResponse('turso', { error: err.message }, 'degraded'));
-    }
-  });
-
-  app.post('/api/projects/:projectId/files', authenticateToken, async (req: any, res: any) => {
-    try {
-      const { name, path, type, content } = req.body;
-      const fileId = `file-${Date.now()}`;
-      await db.insert(schema.files).values({
-        id: fileId,
-        projectId: req.params.projectId,
-        name,
-        path,
-        type,
-        content: content || ''
+      const tokenRes = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
       });
-      res.json(apiResponse('turso', { id: fileId }));
-    } catch (err: any) {
-      res.status(500).json(apiResponse('turso', { error: err.message }, 'degraded'));
-    }
-  });
-  const requireAdmin = (req: any, res: any, next: any) => {
-    // In a real app we derive context from proper JWT payload
-    // We mock session checking
-    const mockIsAdmin = true;
-    if (!mockIsAdmin) {
-      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
-    }
-    next();
-  };
 
-  // Helper to get active tier of user (STEP 6A: supports lookups via userId or username)
-  app.get('/api/payments/user-tier/:userIdOrUsername', async (req, res) => {
-    try {
-      const { userIdOrUsername } = req.params;
-      const foundUser = await db.query.users.findFirst({
-        where: (u, { eq, or }) => or(eq(u.id, userIdOrUsername), eq(u.username, userIdOrUsername))
-      });
-      if (!foundUser) {
-        return res.json({ tier: 'FREE' });
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        console.error('Logto token exchange failed:', err);
+        return res.redirect('/login?error=token_exchange_failed');
       }
-      const sub = await db.query.subscriptions.findFirst({
-        where: (s, { eq, and }) => and(eq(s.userId, foundUser.id), eq(s.status, 'active'))
-      });
-      res.json({ tier: sub ? sub.planId : foundUser.tier || 'FREE' });
-    } catch (err: any) {
-      res.json({ tier: 'FREE' });
-    }
-  });
 
-  app.get('/api/payments/admin/stats', rateLimiter(30, 60000), requireAdmin, async (req, res) => {
-    try {
-      const allPayments = await db.select().from(schema.payments).orderBy(desc(schema.payments.createdAt));
-      const allSubscriptions = await db.select().from(schema.subscriptions);
-      const allAuditLogs = await db.select().from(schema.auditLogs).orderBy(desc(schema.auditLogs.timestamp));
-
-      const confirmedPays = allPayments.filter(p => p.status === 'confirmed');
-      const dzdSum = confirmedPays.filter(p => p.currency === 'DZD').reduce((acc, curr) => acc + curr.amount, 0);
-      const usdSum = confirmedPays.filter(p => p.currency === 'USD' || p.currency === 'USDT').reduce((acc, curr) => acc + curr.amount, 0);
-
-      const totalTransactions = allPayments.length;
-      const activeSubs = allSubscriptions.filter(s => s.status === 'active');
-      const activeSubscriptionsCount = activeSubs.length;
+      const tokens = await tokenRes.json() as any;
       
-      const planDistribution = {
-        FREE: allPayments.length * 2,
-        PRO: activeSubs.filter(s => s.planId === 'PRO').length,
-        TEAM: activeSubs.filter(s => s.planId === 'TEAM').length,
-        ENTERPRISE: activeSubs.filter(s => s.planId === 'ENTERPRISE').length,
-      };
-
-      res.json({
-        dzdEarnings: dzdSum,
-        usdEarnings: usdSum,
-        totalTransactions,
-        activeSubscriptionsCount,
-        planDistribution,
-        payments: allPayments,
-        subscriptions: allSubscriptions,
-        auditLogs: allAuditLogs
+      // Get user info from Logto
+      const userInfoRes = await fetch(`${process.env.LOGTO_ENDPOINT}/oidc/userinfo`, {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
+      const logtoUser = await userInfoRes.json() as any;
+
+      // Upsert user in DB
+      const existingUsers = await db.select().from(schema.users)
+        .where(eq(schema.users.email, logtoUser.email)).limit(1);
+
+      let dbUser = existingUsers[0];
+      const now = new Date();
+
+      if (!dbUser) {
+        const newId = generateId();
+        const username = (logtoUser.preferred_username || logtoUser.email.split('@')[0])
+          .toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 30);
+        await db.insert(schema.users).values({
+          id: newId,
+          username,
+          email: logtoUser.email,
+          displayName: logtoUser.name || username,
+          avatarUrl: logtoUser.picture,
+          role: 'user',
+          tier: 'FREE',
+          isVerified: logtoUser.email_verified ?? false,
+        });
+        const created = await db.select().from(schema.users).where(eq(schema.users.id, newId)).limit(1);
+        dbUser = created[0];
+      } else {
+        // Update avatar / display name if changed
+        await db.update(schema.users)
+          .set({ avatarUrl: logtoUser.picture, displayName: logtoUser.name, updatedAt: now })
+          .where(eq(schema.users.id, dbUser.id));
+      }
+
+      // Issue JWT session cookie
+      const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+      const sessionToken = jwt.sign(
+        { id: dbUser.id, username: dbUser.username, email: dbUser.email, role: dbUser.role, tier: dbUser.tier },
+        secret,
+        { expiresIn: '30d' }
+      );
+
+      res.cookie('haven_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
+      // Check if onboarding needed
+      const destination = logtoUser.name ? '/workspace' : '/welcome';
+      res.redirect(destination);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error('Auth callback error:', err.message);
+      res.redirect('/login?error=server_error');
     }
   });
 
-  app.post('/api/payments/admin/action', rateLimiter(20, 60000), csrfProtection, requireAdmin, async (req, res) => {
+  // Initiate OAuth login
+  app.get('/api/auth/login', (req, res) => {
+    const provider = (req.query.provider as string) || '';
+    const logtoEndpoint = process.env.LOGTO_ENDPOINT;
+    const appId = process.env.LOGTO_APP_ID;
+    const appUrl = process.env.APP_URL;
+
+    if (!logtoEndpoint || !appId || !appUrl) {
+      // In development fallback gracefully to issue local token if not configured
+      if (process.env.NODE_ENV !== 'production') {
+        const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+        const sessionToken = jwt.sign(
+          { id: 'dev-user-id', username: 'dev_user', email: 'kernel.env@gmail.com', role: 'admin', tier: 'PRO' },
+          secret,
+          { expiresIn: '30d' }
+        );
+        res.cookie('haven_session', sessionToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+          path: '/',
+        });
+        return res.redirect('/workspace');
+      }
+      return res.status(500).json({ error: 'Auth not configured. Set LOGTO_ENDPOINT, LOGTO_APP_ID, APP_URL in .env' });
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: appId,
+      redirect_uri: `${appUrl}/api/auth/callback`,
+      scope: 'openid profile email',
+      ...(provider && { connector_id: provider }),
+    });
+
+    res.redirect(`${logtoEndpoint}/oidc/auth?${params.toString()}`);
+  });
+
+  // Session info
+  app.get('/api/auth/me', requireAuth, async (req: any, res) => {
     try {
-      const parsedBody = adminActionBodySchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
+      const users = await db.select().from(schema.users).where(eq(schema.users.id, req.user.id)).limit(1);
+      if (!users[0]) {
+        // Auto create in development if missing
+        if (process.env.NODE_ENV !== 'production' && req.user.id === 'dev-user-id') {
+          await db.insert(schema.users).values({
+            id: 'dev-user-id',
+            username: 'dev_user',
+            email: 'kernel.env@gmail.com',
+            displayName: 'Dev User',
+            role: 'admin',
+            tier: 'FREE',
+          });
+          const created = await db.select().from(schema.users).where(eq(schema.users.id, 'dev-user-id')).limit(1);
+          return res.json(created[0]);
+        }
+        return res.status(404).json({ error: 'User not found' });
       }
-      const { paymentId, action, reason } = parsedBody.data;
+      const user = users[0];
+      res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        bio: user.bio,
+        role: user.role,
+        tier: user.tier,
+        isVerified: user.isVerified,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to fetch user' });
+    }
+  });
 
-      const payments = await db.select().from(schema.payments).where(eq(schema.payments.id, paymentId));
-      if (payments.length === 0) {
-        return res.status(404).json({ error: 'Invoice record not found' });
-      }
-      const payment = payments[0];
+  // Logout
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('haven_session', { path: '/' });
+    const logtoLogout = process.env.LOGTO_ENDPOINT 
+      ? `${process.env.LOGTO_ENDPOINT}/oidc/session/end?post_logout_redirect_uri=${process.env.APP_URL}`
+      : null;
+    res.json({ success: true, logtoLogout });
+  });
 
-      if (action === 'confirm') {
-        await db.update(schema.payments).set({ status: 'confirmed' }).where(eq(schema.payments.id, paymentId));
-        
-        const existingSubs = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, payment.userId));
-        const planMapped = (payment.amount >= 4900 || payment.amount === 49 || payment.amount === 59) ? 'TEAM' : 'PRO';
-        
-        if (existingSubs.length > 0) {
-          await db.update(schema.subscriptions).set({
-            status: 'active',
-            planId: planMapped as any,
-            amountPaid: payment.amount,
-            currency: payment.currency,
-            endDate: new Date(Date.now() + 3600000 * 24 * 30)
-          }).where(eq(schema.subscriptions.userId, payment.userId));
-        } else {
-          await db.insert(schema.subscriptions).values({
-            id: `sub-${Date.now().toString().slice(-4)}`,
-            userId: payment.userId,
-            planId: planMapped as any,
-            status: 'active',
-            startDate: new Date(),
-            endDate: new Date(Date.now() + 3600000 * 24 * 30),
-            amountPaid: payment.amount,
-            currency: payment.currency
+  // CSRF token
+  app.get('/api/auth/csrf-token', (req, res) => {
+    const token = crypto.randomBytes(32).toString('hex');
+    res.cookie('haven_csrf', token, { httpOnly: false, sameSite: 'strict', path: '/' });
+    res.json({ csrfToken: token });
+  });
+
+  // ─── Ably Auth ────────────────────────────────────────────────────────────────
+  app.post('/api/ably/auth', requireAuth, async (req: any, res) => {
+    const ablyKey = process.env.ABLY_API_KEY;
+    if (!ablyKey) {
+      // Return mock token for preview
+      return res.json({
+        keyName: 'mock-key',
+        clientId: req.user.id,
+        timestamp: Date.now(),
+        nonce: 'mock-nonce',
+        mac: 'mock-mac',
+        capability: '{"*":["*"]}',
+      });
+    }
+
+    const [keyName, keySecret] = ablyKey.split(':');
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const timestamp = Date.now();
+    const ttl = 3600;
+
+    const tokenParams = {
+      keyName,
+      ttl,
+      capability: JSON.stringify({ '*': ['subscribe', 'publish', 'presence'] }),
+      clientId: req.user.id,
+      timestamp,
+      nonce,
+    };
+
+    const signString = [
+      tokenParams.keyName,
+      tokenParams.ttl,
+      tokenParams.capability,
+      tokenParams.clientId,
+      tokenParams.timestamp,
+      tokenParams.nonce,
+      '',
+    ].join('\n');
+
+    const mac = crypto.createHmac('sha256', keySecret).update(signString).digest('base64');
+    res.json({ ...tokenParams, mac });
+  });
+
+  // ─── User Routes ──────────────────────────────────────────────────────────────
+  app.get('/api/users/:username', async (req, res) => {
+    try {
+      const users = await db.select().from(schema.users)
+        .where(eq(schema.users.username, req.params.username)).limit(1);
+      if (!users[0]) return res.status(404).json({ error: 'User not found' });
+      const u = users[0];
+      res.json({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        avatarUrl: u.avatarUrl,
+        bio: u.bio,
+        tier: u.tier,
+        isVerified: u.isVerified,
+        createdAt: u.createdAt,
+      });
+    } catch {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.put('/api/users/me', requireAuth, async (req: any, res) => {
+    const { bio, displayName } = req.body;
+    try {
+      await db.update(schema.users)
+        .set({ bio, displayName, updatedAt: new Date() })
+        .where(eq(schema.users.id, req.user.id));
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: 'Failed to update profile' });
+    }
+  });
+
+  // ─── Projects Routes ──────────────────────────────────────────────────────────
+  app.get('/api/projects', async (req, res) => {
+    try {
+      const list = await db.select().from(schema.projects)
+        .orderBy(desc(schema.projects.createdAt)).limit(50);
+      res.json(list);
+    } catch {
+      res.status(500).json({ error: 'Failed to fetch projects' });
+    }
+  });
+
+  app.post('/api/projects', requireAuth, async (req: any, res) => {
+    const { name, description, githubRepo } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Project name is required' });
+    try {
+      const id = generateId();
+      await db.insert(schema.projects).values({
+        id,
+        userId: req.user.id,
+        name: name.trim(),
+        description: description || '',
+        githubRepo: githubRepo || null,
+        status: 'active',
+      });
+      res.json({ id, success: true });
+    } catch {
+      res.status(500).json({ error: 'Failed to create project' });
+    }
+  });
+
+  // ─── Chat Routes ──────────────────────────────────────────────────────────────
+  app.get('/api/chat/:roomId/history', requireAuth, async (req: any, res: any) => {
+    try {
+      const messages = await db.select({
+        id: schema.chatMessages.id,
+        roomId: schema.chatMessages.roomId,
+        content: schema.chatMessages.content,
+        messageType: schema.chatMessages.messageType,
+        createdAt: schema.chatMessages.createdAt,
+        userId: schema.chatMessages.userId,
+        username: schema.users.username,
+        avatarUrl: schema.users.avatarUrl,
+        displayName: schema.users.displayName,
+      })
+      .from(schema.chatMessages)
+      .leftJoin(schema.users, eq(schema.chatMessages.userId, schema.users.id))
+      .where(eq(schema.chatMessages.roomId, req.params.roomId))
+      .orderBy(desc(schema.chatMessages.createdAt))
+      .limit(100);
+      res.json(messages.reverse());
+    } catch {
+      res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+  });
+
+  app.post('/api/chat/:roomId/message', requireAuth, async (req: any, res: any) => {
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    if (content.length > 4000) return res.status(400).json({ error: 'Message too long' });
+    try {
+      const id = generateId();
+      await db.insert(schema.chatMessages).values({
+        id,
+        roomId: req.params.roomId,
+        userId: req.user.id,
+        content: content.trim(),
+        messageType: 'text',
+      });
+      res.json({ id, success: true });
+    } catch {
+      res.status(500).json({ error: 'Failed to save message' });
+    }
+  });
+
+  // ─── Notifications Routes ────────────────────────────────────────────────────
+  app.get('/api/notifications', requireAuth, async (req: any, res) => {
+    try {
+      const list = await db.select().from(schema.notifications)
+        .where(eq(schema.notifications.userId, req.user.id))
+        .orderBy(desc(schema.notifications.createdAt)).limit(30);
+      res.json(list);
+    } catch {
+      res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+  });
+
+  app.post('/api/notifications/mark-read', requireAuth, async (req: any, res) => {
+    try {
+      await db.update(schema.notifications)
+        .set({ read: true })
+        .where(eq(schema.notifications.userId, req.user.id));
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // ─── Payments — Chargily (Algeria DZD) & BTCPay ─────────────────────────────
+  app.post('/api/payments/checkout', requireAuth, async (req: any, res) => {
+    const { planId, paymentMethod, currency, amount } = req.body;
+    if (!planId || !paymentMethod || !amount) {
+      return res.status(400).json({ error: 'Missing required payment fields' });
+    }
+
+    const invoiceId = generateId();
+
+    try {
+      if (paymentMethod === 'chargily') {
+        const chargilyKey = process.env.CHARGILY_SECRET_KEY;
+        if (!chargilyKey || chargilyKey.includes('your-secret') || chargilyKey.includes('api_sk_live_')) {
+          // Mock / Simulated Chargily Response in Dev Mode
+          await db.insert(schema.payments).values({
+            id: invoiceId,
+            userId: req.user.id,
+            provider: 'chargily',
+            method: 'card',
+            amount: Math.round(amount),
+            currency: 'DZD',
+            transactionId: `MOCK_TXN_${Date.now()}`,
+            checkoutId: `MOCK_CK_${Date.now()}`,
+            planId,
+            status: 'pending',
+          });
+          return res.json({
+            success: true,
+            checkoutUrl: `/checkout/success?mockInvoiceId=${invoiceId}&planId=${planId}&amount=${amount}&currency=DZD`,
+            invoice: { id: invoiceId, amount: Math.round(amount), currency: 'DZD' },
           });
         }
-        await addAuditLog(payment.id, payment.userId, 'verified', `Manual bypass action 'confirm' updated status to CONFIRMED. Active ${planMapped} subscription deployed.`, { reason });
-      } else if (action === 'reject') {
-        await db.update(schema.payments).set({ status: 'failed' }).where(eq(schema.payments.id, paymentId));
-        await addAuditLog(payment.id, payment.userId, 'failed', `Manual bypass action 'reject' marked invoice as declined.`, { reason });
-      } else if (action === 'refund') {
-        await db.update(schema.payments).set({ status: 'refunded' }).where(eq(schema.payments.id, paymentId));
-        const userSub = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, payment.userId));
-        if (userSub.length > 0) {
-          await db.update(schema.subscriptions).set({ status: 'canceled' }).where(eq(schema.subscriptions.userId, payment.userId));
+
+        const chargilyRes = await fetch('https://pay.chargily.net/api/v2/checkouts', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${chargilyKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: Math.round(amount),
+            currency: 'dzd',
+            success_url: `${process.env.APP_URL}/checkout/success`,
+            failure_url: `${process.env.APP_URL}/pricing?error=payment_failed`,
+            metadata: { invoiceId, planId, userId: req.user.id },
+            locale: 'ar',
+          }),
+        });
+
+        const chargilyData = await chargilyRes.json() as any;
+        if (!chargilyData.checkout_url) {
+          return res.status(500).json({ error: chargilyData.message || 'Chargily checkout failed' });
         }
-        await addAuditLog(payment.id, payment.userId, 'refunded', `Manual bypass action 'refund' successfully processed. Subscription canceled.`, { reason });
+
+        await db.insert(schema.payments).values({
+          id: invoiceId,
+          userId: req.user.id,
+          provider: 'chargily',
+          method: 'card',
+          amount: Math.round(amount),
+          currency: 'DZD',
+          transactionId: chargilyData.id,
+          checkoutId: chargilyData.id,
+          planId,
+          status: 'pending',
+        });
+
+        return res.json({
+          success: true,
+          checkoutUrl: chargilyData.checkout_url,
+          invoice: { id: invoiceId, amount: Math.round(amount), currency: 'DZD' },
+        });
       }
 
-      const finalDB = await db.select().from(schema.payments);
-      res.json({ success: true, db: finalDB });
+      if (paymentMethod === 'btcpay' || paymentMethod === 'crypto') {
+        const btcpayKey = process.env.BTCPAY_SERVER_API_KEY;
+        const btcpayStore = process.env.BTCPAY_SERVER_STORE_ID;
+        const btcpayUrl = process.env.BTCPAY_SERVER_URL;
+
+        if (!btcpayKey || !btcpayStore || !btcpayUrl || btcpayUrl.includes('your-btcpay-server')) {
+          // Fallback / Sandbox BTCPay Server simulation
+          await db.insert(schema.payments).values({
+            id: invoiceId,
+            userId: req.user.id,
+            provider: 'btcpay',
+            method: 'crypto',
+            amount: Math.round(amount * 100),
+            currency: 'USDT',
+            transactionId: `MOCK_BTCPAY_${Date.now()}`,
+            checkoutId: `MOCK_BTCPAY_${Date.now()}`,
+            planId,
+            status: 'pending',
+          });
+          return res.json({
+            success: true,
+            checkoutUrl: `/checkout/success?mockInvoiceId=${invoiceId}&planId=${planId}&amount=${amount}&currency=USDT`,
+            invoice: { id: invoiceId, amount, currency: 'USDT' },
+          });
+        }
+
+        const btcpayRes = await fetch(`${btcpayUrl}/api/v1/stores/${btcpayStore}/invoices`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${btcpayKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: String(amount),
+            currency: 'USDT',
+            metadata: { invoiceId, planId, userId: req.user.id },
+            checkout: {
+              redirectURL: `${process.env.APP_URL}/checkout/success`,
+              redirectAutomatically: true,
+            },
+          }),
+        });
+
+        const btcpayData = await btcpayRes.json() as any;
+        if (!btcpayData.id) {
+          return res.status(500).json({ error: btcpayData.message || 'BTCPay invoice creation failed' });
+        }
+
+        await db.insert(schema.payments).values({
+          id: invoiceId,
+          userId: req.user.id,
+          provider: 'btcpay',
+          method: 'crypto',
+          amount: Math.round(amount * 100),
+          currency: 'USDT',
+          transactionId: btcpayData.id,
+          checkoutId: btcpayData.id,
+          planId,
+          status: 'pending',
+        });
+
+        return res.json({
+          success: true,
+          checkoutUrl: btcpayData.checkoutLink,
+          invoice: { id: invoiceId, amount, currency: 'USDT', btcpayId: btcpayData.id },
+        });
+      }
+
+      res.status(400).json({ error: 'Invalid payment method' });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error('Payment checkout error:', err.message);
+      res.status(500).json({ error: 'Payment processing failed' });
     }
   });
 
-  const handleCheckoutInvoiceCreation = async (req: any, res: any) => {
-    try {
-      const parsedBody = checkoutBodySchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
-      }
-      const { planId, paymentMethod, currency, amount, email, userId } = parsedBody.data;
+  // Chargily webhook
+  app.post('/api/payments/webhook/chargily', express.raw({ type: 'application/json' }), async (req, res) => {
+    const rawBody = req.body.toString();
+    const signature = req.headers['signature'] as string;
 
-      const invoiceId = `havpay-${Date.now().toString().slice(-6)}`;
+    if (!verifyChargilyWebhook(rawBody, signature)) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+
+    let event: any;
+    try { event = JSON.parse(rawBody); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+
+    if (event.type === 'checkout.paid') {
+      const { metadata, id: checkoutId } = event.data;
+      if (!metadata?.invoiceId) return res.json({ received: true });
+
+      await db.update(schema.payments)
+        .set({ status: 'confirmed', webhookVerified: true })
+        .where(and(eq(schema.payments.checkoutId, checkoutId), eq(schema.payments.provider, 'chargily')));
+
+      const payments = await db.select().from(schema.payments)
+        .where(eq(schema.payments.id, metadata.invoiceId)).limit(1);
       
-      await db.insert(schema.payments).values({
-        id: invoiceId,
-        userId: userId,
-        provider: paymentMethod === 'chargily' ? 'chargily' : (paymentMethod === 'crypto' ? 'crypto' : 'global'),
-        method: paymentMethod === 'chargily' ? 'EDAHABIA / SATIM' : (paymentMethod === 'crypto' ? 'USDT (TRC20)' : 'PayPal Direct Wallet'),
-        amount: typeof amount === 'string' ? parseFloat(amount) : amount,
-        currency: currency || 'USD',
-        transactionId: `TXN-${Math.random().toString(36).substring(2, 11).toUpperCase()}`,
-        status: 'pending',
-        createdAt: new Date()
-      });
-
-      await addAuditLog(invoiceId, userId, 'initiated', `Initialized invoice ${invoiceId} on ${paymentMethod} for ${amount} ${currency}. Status: PENDING.`);
-
-      let depositAddress = '';
-      if (paymentMethod === 'crypto') {
-        depositAddress = currency === 'USDT' 
-          ? 'TY8vG1uX983W8zSBeNn8Yc6c9yZp6e5g8a' 
-          : '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'; 
+      if (payments[0] && metadata.planId) {
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 1);
+        await db.insert(schema.subscriptions).values({
+          id: generateId(),
+          userId: payments[0].userId,
+          paymentId: metadata.invoiceId,
+          planId: metadata.planId,
+          status: 'active',
+          billingCycle: 'monthly',
+          endDate,
+          amountPaid: payments[0].amount,
+          currency: payments[0].currency,
+        });
+        await db.update(schema.users)
+          .set({ tier: metadata.planId, updatedAt: new Date() })
+          .where(eq(schema.users.id, payments[0].userId));
       }
+    }
+
+    res.json({ received: true });
+  });
+
+  // BTCPay webhook
+  app.post('/api/payments/webhook/btcpay', express.raw({ type: 'application/json' }), async (req, res) => {
+    const rawBody = req.body.toString();
+    const signature = req.headers['btcpay-sig'] as string;
+
+    if (!verifyBtcPayWebhook(rawBody, signature?.replace('sha256=', ''))) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+
+    let event: any;
+    try { event = JSON.parse(rawBody); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+
+    if (event.type === 'InvoiceSettled') {
+      const payment = await db.select().from(schema.payments)
+        .where(eq(schema.payments.checkoutId, event.invoiceId)).limit(1);
+
+      if (payment[0]) {
+        await db.update(schema.payments)
+          .set({ status: 'confirmed', webhookVerified: true })
+          .where(eq(schema.payments.id, payment[0].id));
+
+        if (payment[0].planId) {
+          const endDate = new Date();
+          endDate.setMonth(endDate.getMonth() + 1);
+          await db.insert(schema.subscriptions).values({
+            id: generateId(),
+            userId: payment[0].userId,
+            paymentId: payment[0].id,
+            planId: payment[0].planId as any,
+            status: 'active',
+            billingCycle: 'monthly',
+            endDate,
+            amountPaid: payment[0].amount,
+            currency: payment[0].currency,
+          });
+          await db.update(schema.users)
+            .set({ tier: payment[0].planId as any, updatedAt: new Date() })
+            .where(eq(schema.users.id, payment[0].userId));
+        }
+      }
+    }
+
+    res.json({ received: true });
+  });
+
+  // User tier check
+  app.get('/api/payments/user-tier/:userId', requireAuth, async (req: any, res) => {
+    if (req.user.id !== req.params.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+      const users = await db.select({ tier: schema.users.tier })
+        .from(schema.users).where(eq(schema.users.id, req.params.userId)).limit(1);
+      res.json({ tier: users[0]?.tier || 'FREE' });
+    } catch {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Downgrade to free
+  app.post('/api/payments/downgrade-free', requireAuth, async (req: any, res) => {
+    try {
+      await db.update(schema.users)
+        .set({ tier: 'FREE', updatedAt: new Date() })
+        .where(eq(schema.users.id, req.user.id));
+      await db.update(schema.subscriptions)
+        .set({ status: 'canceled' })
+        .where(and(eq(schema.subscriptions.userId, req.user.id), eq(schema.subscriptions.status, 'active')));
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: 'Downgrade failed' });
+    }
+  });
+
+  // ─── Admin Routes ─────────────────────────────────────────────────────────────
+  app.get('/api/payments/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const [totalUsers] = await db.select({ count: count() }).from(schema.users);
+      const [totalPayments] = await db.select({ count: count() }).from(schema.payments)
+        .where(eq(schema.payments.status, 'confirmed'));
+      const [activeSubscriptions] = await db.select({ count: count() }).from(schema.subscriptions)
+        .where(eq(schema.subscriptions.status, 'active'));
+
+      const recentPayments = await db.select().from(schema.payments)
+        .orderBy(desc(schema.payments.createdAt)).limit(20);
+      const recentSubs = await db.select().from(schema.subscriptions)
+        .orderBy(desc(schema.subscriptions.startDate)).limit(20);
 
       res.json({
-        success: true,
-        invoice: { id: invoiceId, amount, currency, status: 'pending' },
-        depositAddress,
-        redirectSimulatedUrl: `/checkout/chargily/${invoiceId}`,
-        qrSimulatedUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(depositAddress || 'hav-pay-verification')}`
+        totalUsers: totalUsers.count,
+        confirmedPayments: totalPayments.count,
+        activeSubscriptions: activeSubscriptions.count,
+        payments: recentPayments,
+        subscriptions: recentSubs,
       });
-
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  };
-
-  // STEP 6A: Support BOTH '/api/payments/checkout' and '/api/payments/create-invoice' with CSRF and Zod.
-  app.post('/api/payments/checkout', rateLimiter(20, 60000), csrfProtection, handleCheckoutInvoiceCreation);
-  app.post('/api/payments/create-invoice', rateLimiter(20, 60000), csrfProtection, handleCheckoutInvoiceCreation);
-
-  // STEP 6B: Persist Free Tier downgrade to Database Subscriptions and profile
-  app.post('/api/payments/downgrade-free', rateLimiter(20, 60000), csrfProtection, async (req, res) => {
-    try {
-      const { userId } = req.body;
-      if (!userId) {
-        return res.status(400).json({ error: 'userId is required' });
-      }
-
-      await db.update(schema.users).set({ tier: 'FREE' }).where(eq(schema.users.id, userId));
-      await db.update(schema.subscriptions).set({ status: 'canceled' }).where(eq(schema.subscriptions.userId, userId));
-      await addAuditLog('none', userId, 'failed', 'User voluntarily downgraded active membership to FREE tier.');
-
-      res.json({ success: true, message: 'Successfully transitioned user tier to FREE in database.' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch {
+      res.status(500).json({ error: 'Failed to load stats' });
     }
   });
 
-  // Client polling for verify - Requires CSRF protection and Schema validations
-  app.post('/api/payments/verify', rateLimiter(60, 60000), csrfProtection, async (req, res) => {
+  app.post('/api/payments/admin/action', requireAuth, requireAdmin, async (req: any, res) => {
+    const { paymentId, action } = req.body;
+    if (!paymentId || !['confirm', 'reject', 'refund'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action or missing paymentId' });
+    }
+
     try {
-      const parsedBody = verifyBodySchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json({ error: 'Body verification failed', details: parsedBody.error.issues });
-      }
-      const { invoiceId } = parsedBody.data;
-
-      const payments = await db.select().from(schema.payments).where(eq(schema.payments.id, invoiceId));
-      if (payments.length === 0) {
-        return res.status(404).json({ error: 'Invoice not found' });
-      }
-
+      const payments = await db.select().from(schema.payments)
+        .where(eq(schema.payments.id, paymentId)).limit(1);
+      if (!payments[0]) return res.status(404).json({ error: 'Payment not found' });
       const payment = payments[0];
-      const subs = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, payment.userId));
 
-      res.json({
-        success: true,
-        payment,
-        subscription: subs.find(s => s.status === 'active')
+      const statusMap: Record<string, any> = {
+        confirm: 'confirmed', reject: 'failed', refund: 'refunded'
+      };
+      await db.update(schema.payments)
+        .set({ status: statusMap[action] }).where(eq(schema.payments.id, paymentId));
+
+      if (action === 'confirm' && payment.planId) {
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 1);
+        await db.insert(schema.subscriptions).values({
+          id: generateId(), userId: payment.userId,
+          paymentId: payment.id, planId: payment.planId as any,
+          status: 'active', billingCycle: 'monthly', endDate,
+          amountPaid: payment.amount, currency: payment.currency,
+        });
+        await db.update(schema.users)
+          .set({ tier: payment.planId as any, updatedAt: new Date() })
+          .where(eq(schema.users.id, payment.userId));
+      } else if (action === 'refund' || action === 'reject') {
+        await db.update(schema.users)
+          .set({ tier: 'FREE', updatedAt: new Date() })
+          .where(eq(schema.users.id, payment.userId));
+      }
+
+      await db.insert(schema.auditLogs).values({
+        id: generateId(), invoiceId: paymentId,
+        userId: payment.userId, event: 'admin_override',
+        message: `Admin ${action} on payment ${paymentId}`,
       });
 
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.json({ success: true, payment: { ...payment, status: statusMap[action] } });
+    } catch {
+      res.status(500).json({ error: 'Admin action failed' });
     }
   });
 
-  // Webhook Signature validation
-  app.post('/api/payments/webhook', rateLimiter(20, 60000), async (req, res) => {
+  // ─── GitHub Releases (Download Page) ─────────────────────────────────────────
+  app.get('/api/releases/latest', async (req, res) => {
+    const githubToken = process.env.GITHUB_TOKEN;
+    const repo = 'dzlab/haven';
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'haven-os/1.0',
+    };
+    if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
+
     try {
-      const signatureHeader = req.headers['x-chargily-signature'] || req.headers['x-payment-webhook-hmac'];
-      const rawBody = JSON.stringify(req.body); // For exact string matching in real world we'd use raw-body parser
-      const { event, data } = req.body;
-
-      if (!signatureHeader) {
-        return res.status(401).json({ error: 'Unauthorized: missing X-Chargily-Signature' });
+      const releasesRes = await fetch(`https://api.github.com/repos/${repo}/releases`, { headers });
+      if (!releasesRes.ok) {
+        const errData = await releasesRes.json() as any;
+        return res.status(releasesRes.status).json({ 
+          error: 'GitHub API error', 
+          message: errData.message,
+          releases: [] 
+        });
+      }
+      const releases = await releasesRes.json() as any[];
+      if (!releases.length) {
+        return res.json({ releases: [], hasReleases: false });
       }
       
-      const secret = process.env.CHARGILY_WEBHOOK_SECRET || 'dev_secret_hmac';
-      const expectedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-
-      // Constant time comparison (fallback to length checks to prevent errors if mismatch size)
-      let isValidSignature = false;
-      const sigBuffer = Buffer.from(signatureHeader as string);
-      const expectedBuffer = Buffer.from(expectedSignature);
-      if (sigBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
-         isValidSignature = true;
-      }
-      
-      // We will allow fake simulation headers in this demo if signature validation naturally fails for mock data
-      // but in production we enforcing rejection!
-      if (!isValidSignature && signatureHeader !== 'MOCK_SIGNATURE_OK') {
-        await addAuditLog('unknown', 'unknown', 'failed', `Rejected incoming webhook request header. Bad checksum.`, { payload: req.body });
-        return res.status(401).json({ error: 'Invalid HMAC signature' });
-      }
-
-      console.log(`[Webhook Secured Validation] Verified signature checksum: ${signatureHeader}`);
-
-      if (event === 'checkout.paid' && data && data.invoiceId) {
-        const matchingId = data.invoiceId;
-        const payments = await db.select().from(schema.payments).where(eq(schema.payments.id, matchingId));
-        if (payments.length > 0) {
-          const payment = payments[0];
-          await db.update(schema.payments).set({ status: 'confirmed' }).where(eq(schema.payments.id, matchingId));
-          
-          const targetPlan = (payment.amount >= 4900 || payment.amount === 49 || payment.amount === 59) ? 'TEAM' : 'PRO';
-          const userSub = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, payment.userId));
-
-          if (userSub.length > 0) {
-            await db.update(schema.subscriptions).set({
-              status: 'active',
-              planId: targetPlan as any,
-              endDate: new Date(Date.now() + 3600000 * 24 * 30)
-            }).where(eq(schema.subscriptions.userId, payment.userId));
-          } else {
-            await db.insert(schema.subscriptions).values({
-              id: `sub-${Date.now().toString().slice(-4)}`,
-              userId: payment.userId,
-              planId: targetPlan as any,
-              status: 'active',
-              startDate: new Date(),
-              endDate: new Date(Date.now() + 3600000 * 24 * 30),
-              amountPaid: payment.amount,
-              currency: payment.currency
-            });
-          }
-          await addAuditLog(matchingId, payment.userId, 'verified', `Webhook event ${event} signature ${signatureHeader} validated safely. ${targetPlan} active.`, { event, payload: data });
-          return res.json({ status: 'success', message: 'Automation complete. Membership active.' });
-        }
-      }
-
-      await addAuditLog('unknown', 'unknown', 'failed', `Invalid event payload structure or invoice mismatch`, { payload: req.body });
-      res.status(400).json({ error: 'Invalid event payload structure or invoice mismatch' });
+      const parsed = releases.slice(0, 5).map((r: any) => ({
+        id: r.id,
+        tag: r.tag_name,
+        name: r.name,
+        body: r.body,
+        draft: r.draft,
+        prerelease: r.prerelease,
+        publishedAt: r.published_at,
+        assets: r.assets.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          size: a.size,
+          downloadUrl: a.browser_download_url,
+          contentType: a.content_type,
+          downloadCount: a.download_count,
+        })),
+      }));
+      res.json({ releases: parsed, hasReleases: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'Failed to fetch releases', releases: [] });
     }
   });
 
+  // ─── Health ───────────────────────────────────────────────────────────────────
+  app.get('/api/health', async (req, res) => {
+    let dbStatus = 'ok';
+    try {
+      await db.select({ count: count() }).from(schema.users);
+    } catch {
+      dbStatus = 'error';
+    }
+    res.json({ status: 'ok', db: dbStatus, ts: Date.now() });
+  });
+
+  // ─── Static Frontend ──────────────────────────────────────────────────────────
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -825,24 +895,15 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
+      if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'API route not found' });
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  // STEP 10B: Central Global Express Error Handling Middleware
-  app.use((err: any, req: any, res: any, next: any) => {
-    console.error('[CENTRAL SERVER FATAL EXCEPTION]:', err);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: process.env.NODE_ENV === 'production' 
-        ? 'A sudden high-impact incident occurred on backend application nodes.' 
-        : err.message,
-      timestamp: Date.now()
-    });
-  });
-
+  // ─── Start ────────────────────────────────────────────────────────────────────
+  const PORT = parseInt(process.env.PORT || '3000');
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Haven OS running on port ${PORT}`);
   });
 }
 

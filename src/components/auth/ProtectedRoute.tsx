@@ -1,62 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 
-/**
- * ProtectedRoute guards core engines and workflows, checks session verification 
- * state, and handles context redirects using an optimistic cache pattern.
- */
-export default function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('haven_user_role') === 'admin' || localStorage.getItem('haven_user_tier') === 'ENTERPRISE';
-  });
-  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
-    return localStorage.getItem('haven_session') === 'active';
-  });
-  const location = useLocation();
+interface Props {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+}
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
+export default function ProtectedRoute({ children, adminOnly = false }: Props) {
+  const { isAuthenticated, isAdmin, loading } = useAuth();
 
-    fetch('/api/auth/me', { signal })
-      .then(res => {
-        if (!res.ok) throw new Error('Not authenticated');
-        return res.json();
-      })
-      .then(data => {
-        setIsAuthed(true);
-        localStorage.setItem('haven_session', 'active');
-        if (data.tier === 'ENTERPRISE' || data.isAdmin) {
-          setIsAdmin(true);
-          localStorage.setItem('haven_user_role', 'admin');
-          localStorage.setItem('haven_user_tier', 'ENTERPRISE');
-        } else {
-          setIsAdmin(false);
-          localStorage.removeItem('haven_user_role');
-          localStorage.removeItem('haven_user_tier');
-        }
-      })
-      .catch(err => {
-        if (err.name === 'AbortError') return;
-        setIsAuthed(false);
-        setIsAdmin(false);
-        localStorage.removeItem('haven_session');
-        localStorage.removeItem('haven_user_role');
-        localStorage.removeItem('haven_user_tier');
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
-
-  if (!isAuthed) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <span className="text-sm font-medium">Loading...</span>
+        </div>
+      </div>
+    );
   }
 
-  if (adminOnly && !isAdmin) {
-    return <Navigate to="/" replace />;
-  }
-
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (adminOnly && !isAdmin) return <Navigate to="/workspace" replace />;
   return <>{children}</>;
 }

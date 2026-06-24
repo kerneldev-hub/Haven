@@ -1,0 +1,37 @@
+name: Automated Turso Database Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # Runs daily at 03:00 UTC
+  workflow_dispatch: # Allows manual trigger from Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Turso CLI
+        run: |
+          curl -sSfL https://get.turso.tech/install.sh | bash
+          echo "$HOME/.turso" >> $GITHUB_PATH
+
+      - name: Authenticate Turso CLI
+        run: |
+          turso auth login --token "${{ secrets.TURSO_API_TOKEN }}"
+
+      - name: Perform SQL Dump
+        run: |
+          mkdir -p db-backups
+          TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+          # We extract the db name from the connection URL or a secret
+          DB_NAME="${{ secrets.TURSO_DB_NAME }}"
+          turso db shell $DB_NAME .dump > db-backups/backup-$TIMESTAMP.sql
+
+      - name: Upload Backup Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: turso-sql-backup
+          path: db-backups/
+          retention-days: 30
