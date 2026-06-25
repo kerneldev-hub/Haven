@@ -13,7 +13,7 @@ HAVEN OS is an ecosystem of powerful, edge-native workspace tools, integrating l
 - **Backend**: Cloudflare workers managing distributed state, database adapters, and payment webhook logic.
 - **Data**: Turso (SQLite on the edge), with failover to structured fallback clusters (Supabase).
 - **Distribution**: 
-  - Desktop Apps (Tauri) for Windows, macOS, and Linux
+  - Desktop Apps (Tauri) for Windows and Linux
   - Mobile Apps (Capacitor) for Android
   - Tor native support.
 

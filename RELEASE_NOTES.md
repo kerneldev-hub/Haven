@@ -22,7 +22,7 @@ Haven has successfully transitioned from an experimental prototype into a highly
 
 ### 4. CROSS-PLATFORM SYSTEM REDESIGN
 *   **True Download Hierarchy**: Created a dual-axis distribution experience on `/download` centering on an elegant **Web App (PWA) Install** utility.
-*   **Roadmap Honesty**: Standardized desktop platform channels (Windows, macOS, Linux) with high-fidelity, clean status containers. If no executable is present, the interface displays **Available soon** or guides developers to the live, automated GitHub Actions compilation pipeline.
+*   **Roadmap Honesty**: Standardized desktop platform channels (Windows, Linux) with high-fidelity, clean status containers. If no executable is present, the interface displays **Available soon** or guides developers to the live, automated GitHub Actions compilation pipeline.
 
 ---
 

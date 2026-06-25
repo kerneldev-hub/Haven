@@ -35,7 +35,7 @@ npm run start
 
 ## Desktop Build (Windows / Linux)
 
-HAVEN employs **Tauri**. Windows and Linux are supported natively; macOS is explicitly NOT supported.
+HAVEN employs **Tauri**. Windows and Linux are supported natively.
 
 ```bash
 # Developer Sandbox
@@ -47,7 +47,7 @@ npm run tauri:build
 
 ## Native Mobile Build (Android)
 
-Built via Android Capacitor layer. iOS is explicitly NOT supported.
+Built via Android Capacitor layer.
 
 ```bash
 # Sync frontend assets to Android package

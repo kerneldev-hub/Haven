@@ -28,7 +28,7 @@ interface ReleasesResponse {
   error?: string;
 }
 
-type Platform = 'web' | 'windows' | 'macos' | 'linux' | 'android' | 'ios';
+type Platform = 'web' | 'windows' | 'linux' | 'android';
 
 interface PlatformTarget {
   platform: Platform;
@@ -68,19 +68,6 @@ const platforms: PlatformTarget[] = [
     buildCommand: 'npm run tauri:build',
   },
   {
-    platform: 'macos',
-    label: 'macOS',
-    os: 'macOS 12+ · Apple Silicon / Intel',
-    ext: ['.dmg', '.app', '_mac', '_macos'],
-    icon: (
-      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.2.67-2.92 1.49-.6.69-1.12 1.83-1 2.96 1.08.08 2.21-.55 2.93-1.39z"/>
-      </svg>
-    ),
-    description: 'Sovereign desktop client app for macOS. Fully compatible with Apple Silicon and Intel Chips.',
-    buildCommand: 'npm run tauri:build -- --target universal-apple-darwin',
-  },
-  {
     platform: 'linux',
     label: 'Linux',
     os: 'Ubuntu 22.04+ · AppImage / deb',
@@ -105,20 +92,7 @@ const platforms: PlatformTarget[] = [
     ),
     description: 'Sideloadable APK built with Capacitor v8. No Google Play Store required.',
     installCommand: 'adb install haven-release.apk',
-  },
-  {
-    platform: 'ios',
-    label: 'iOS (iPhone / iPad)',
-    os: 'iOS 15+ · Safari PWA / Native',
-    ext: ['.ipa'],
-    icon: (
-      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-        <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C3.12 15.65 4 8.71 9.29 8.55c1.4.04 2.16.81 3.01.81.82 0 1.95-.87 3.49-.71 1.44.15 2.53.74 3.1 1.63-2.97 1.74-2.5 5.61.1 6.78-.6 1.48-1.39 2.94-2.45 3.99zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.2 2.53-2.04 4.41-3.74 4.25z"/>
-      </svg>
-    ),
-    description: 'Runs as a fully sovereign web workspace. Add to Home Screen via iOS Safari for standalone offline execution.',
-    buildCommand: 'npm run build && npx cap add ios',
-  },
+  }
 ];
 
 function formatBytes(bytes: number): string {
@@ -128,10 +102,6 @@ function formatBytes(bytes: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-function matchAssets(assets: ReleaseAsset[], exts: string[]): ReleaseAsset[] {
-  return assets.filter(a => exts.some(ext => a.name.toLowerCase().includes(ext.toLowerCase())));
 }
 
 export default function DownloadPage() {
@@ -175,7 +145,6 @@ export default function DownloadPage() {
   useEffect(() => { 
     fetchReleases(); 
 
-    // Listen for PWA install prompt support
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -185,17 +154,9 @@ export default function DownloadPage() {
 
     const ua = navigator.userAgent.toLowerCase();
     if (ua.indexOf('win') !== -1) setDetectedPlatform('windows');
-    else if (ua.indexOf('mac') !== -1) {
-      if (ua.indexOf('iphone') !== -1 || ua.indexOf('ipad') !== -1 || ua.indexOf('ipod') !== -1) {
-        setDetectedPlatform('ios');
-      } else {
-        setDetectedPlatform('macos');
-      }
-    }
-    else if (ua.indexOf('linux') !== -1) {
-      if (ua.indexOf('android') !== -1) setDetectedPlatform('android');
-      else setDetectedPlatform('linux');
-    }
+    else if (ua.indexOf('android') !== -1) setDetectedPlatform('android');
+    else if (ua.indexOf('linux') !== -1) setDetectedPlatform('linux');
+    else setDetectedPlatform('web');
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -203,6 +164,15 @@ export default function DownloadPage() {
   }, []);
 
   const latestRelease = data?.releases?.[0] ?? null;
+  const hasAssets = !!(latestRelease && latestRelease.assets && latestRelease.assets.length > 0);
+
+  // Match native assets for each platform target
+  const getAssetForPlatform = (target: PlatformTarget): ReleaseAsset | null => {
+    if (!latestRelease?.assets) return null;
+    return latestRelease.assets.find(asset => 
+      target.ext.some(ext => asset.name.toLowerCase().endsWith(ext))
+    ) || null;
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground select-none relative overflow-hidden">
@@ -218,7 +188,8 @@ export default function DownloadPage() {
             <Package className="w-3.5 h-3.5 text-sky-400" />
             Cross-Platform · Sovereign Client · Free
           </div>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6 flex items-center justify-center gap-4">
+            <img src="/logos/haven-mark.svg" alt="Haven Logo" className="w-12 h-12 md:w-16 md:h-16" />
             Get Haven OS
           </h1>
           <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8 font-normal">
@@ -235,10 +206,9 @@ export default function DownloadPage() {
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono">Suggested Client</p>
                   <p className="text-sm font-extrabold text-foreground">
                     {detectedPlatform === 'windows' && 'Windows Sovereign Client'}
-                    {detectedPlatform === 'macos' && 'macOS Sovereign Client'}
                     {detectedPlatform === 'linux' && 'Linux Desktop Client'}
                     {detectedPlatform === 'android' && 'Android Portable Workstation'}
-                    {detectedPlatform === 'ios' && 'iOS Mobile Client'}
+                    {detectedPlatform === 'web' && 'Sovereign Web PWA'}
                   </p>
                 </div>
               </div>
@@ -286,9 +256,7 @@ export default function DownloadPage() {
 
             <div className="md:col-span-5 flex flex-col items-center justify-center border border-border/60 bg-[#0e0f12]/60 rounded-2xl p-6 md:p-8 relative">
               <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center text-primary mb-4 shadow-[0_0_15px_rgba(var(--primary),0.25)] border border-primary/20">
-                <svg viewBox="0 0 24 24" className="w-7 h-7 text-sky-400 animate-pulse" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.4z"/>
-                </svg>
+                <img src="/logos/haven-mark.svg" alt="Haven Logo" className="w-8 h-8" />
               </div>
 
               {isInstallable ? (
@@ -327,39 +295,82 @@ export default function DownloadPage() {
           </div>
         </div>
 
-        {/* Native Cross-Platform Coming Soon Section */}
-        <div className="mb-16 border border-border bg-card/45 backdrop-blur-xl rounded-[2rem] p-8 md:p-10 text-center relative overflow-hidden">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/5 rounded-full blur-[120px] pointer-events-none -z-10" />
+        {/* Native Client Download Section */}
+        <div className="mb-16 border border-border bg-card/45 backdrop-blur-xl rounded-[2rem] p-8 md:p-10 text-left relative overflow-hidden">
+          <h2 className="text-2xl font-black mb-4 flex items-center gap-2">
+            <Monitor className="w-6 h-6 text-sky-400" />
+            Native Client Distributions
+          </h2>
           
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-5">
-            <Clock className="w-6 h-6 text-amber-500 animate-pulse" />
-          </div>
-          
-          <h2 className="text-2xl font-black mb-3">Native Desktop & Mobile Sovereign Clients</h2>
-          <p className="text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed mb-8">
-            Compiled pre-built binaries for Windows, macOS, Linux, and Android are currently in active validation. Versioned, cryptographically signed installation files will be released on our GitHub tags soon.
-          </p>
+          {/* Status Display based on Release Assets existence */}
+          {!hasAssets ? (
+            <div className="mb-8 p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-200 flex items-start gap-3.5">
+              <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm font-sans font-semibold">
+                <p className="text-foreground font-extrabold">Notice: Release Builds pending completion</p>
+                <p className="text-zinc-300 font-medium leading-relaxed">
+                  Native builds are currently being finalized. Use Haven Web while deployment is completed.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-8 p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 flex items-start gap-3.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm font-sans font-semibold">
+                <p className="text-foreground font-extrabold">Release {latestRelease?.tag} Available</p>
+                <p className="text-zinc-300 font-medium">
+                  Native desktop and portable workstation client files are ready to download below. Published on {latestRelease && formatDate(latestRelease.publishedAt)}.
+                </p>
+              </div>
+            </div>
+          )}
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-3xl mx-auto text-left">
-            {[
-              { platform: 'Windows Client', version: 'v1.1 (Tauri v2)', desc: 'Pre-packaged MSI/EXE installer with auto-update, safe local sandbox directories.', status: 'In Validation' },
-              { platform: 'macOS Sovereign', version: 'v1.1 (Tauri v2)', desc: 'Apple Silicon & Intel universal DMG builds, optimized for system energy limits.', status: 'In Validation' },
-              { platform: 'Linux Desktop', version: 'v1.1 (AppImage)', desc: 'Resilient standalone AppImage & Debian package dependencies, zero tracking.', status: 'In Validation' },
-              { platform: 'Android Workstation', version: 'v1.2 (Capacitor v8)', desc: 'Standalone APK download, complete full-screen mobile workstation view.', status: 'In Pipeline' }
-            ].map((node, i) => (
-              <div key={i} className="border border-border/50 bg-[#0e0f12]/60 rounded-xl p-4 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start gap-1 mb-1.5">
-                    <span className="font-extrabold text-xs text-foreground font-sans">{node.platform}</span>
-                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono">
-                      {node.status}
+          {/* Grid of Platforms (Excluding macOS and iOS) */}
+          <div className="grid md:grid-cols-3 gap-6">
+            {platforms.filter(p => p.platform !== 'web').map((target) => {
+              const asset = getAssetForPlatform(target);
+              const downloadAvailable = hasAssets && asset;
+
+              return (
+                <div key={target.platform} className="border border-border/60 bg-[#0e0f12]/60 rounded-2xl p-6 flex flex-col justify-between hover:border-border/100 transition-all">
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/15">
+                        {target.icon}
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-sm text-foreground">{target.label}</h3>
+                        <p className="text-[11px] text-muted-foreground font-mono">{target.os}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-zinc-300 mb-6 font-sans leading-relaxed">{target.description}</p>
+                  </div>
+
+                  <div>
+                    {downloadAvailable ? (
+                      <a
+                        href={asset.downloadUrl}
+                        className="flex items-center justify-center w-full px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-bold gap-2 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>Download {asset.name.split('.').pop()?.toUpperCase()} ({formatBytes(asset.size)})</span>
+                      </a>
+                    ) : (
+                      <button
+                        disabled
+                        className="flex items-center justify-center w-full px-4 py-2.5 rounded-xl bg-zinc-800/50 text-zinc-500 border border-zinc-800 transition-all text-xs font-bold gap-2 cursor-not-allowed"
+                      >
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>Build Pending</span>
+                      </button>
+                    )}
+                    <span className="text-[10px] text-zinc-500 block text-center mt-2.5 font-mono">
+                      {target.buildCommand ? `Local Compile: ${target.buildCommand}` : 'Continuous Integration'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-primary font-mono block mb-2">{node.version}</span>
-                  <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">{node.desc}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

@@ -313,12 +313,6 @@ export default function DocsPage() {
                 </div>
               ))}
             </div>
-
-            <div className="p-4 bg-zinc-950/40 border border-border/40 rounded-2xl">
-              <p className="text-xs text-zinc-400 leading-normal">
-                ⚠️ <strong className="text-foreground">macOS Warning:</strong> macOS and iOS are not supported targets at this time due to restricted native sandboxing restrictions.
-              </p>
-            </div>
           </div>
         );
 

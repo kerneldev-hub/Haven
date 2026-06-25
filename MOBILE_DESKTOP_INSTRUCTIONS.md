@@ -5,8 +5,6 @@
 - **Linux** (desktop, Tauri)
 - **Android** (mobile, Capacitor)
 
-> **Note:** macOS and iOS are explicitly NOT supported targets.
-
 ## Windows/Linux desktop (run on respective OS, or cross-compile via GitHub Actions)
 To develop locally:
 \`\`\`bash
