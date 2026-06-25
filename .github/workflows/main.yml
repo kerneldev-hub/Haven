@@ -1,0 +1,125 @@
+name: HAVEN OS Integration & Build Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-and-test:
+    name: Core Validation (Lint & Type-Check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-mode: '18'
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Base Dependencies
+        run: npm ci
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Run Type-Checker (Tsc)
+        run: npm run typecheck
+
+      - name: Compile Applet (Production Web Build)
+        run: npm run build
+
+  build-desktop-tauri:
+    name: Build Tauri Clients (Windows & Linux)
+    needs: validate-and-test
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust Stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install System Dependencies (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayumu-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Desktop Build
+        run: npm run build
+
+      - name: Package Tauri Desktop Clients
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "HAVEN OS Sovereign Release v__VERSION__"
+          releaseBody: "Automated production package release for Windows and Linux."
+          releaseDraft: true
+          prerelease: false
+
+  build-mobile-capacitor:
+    name: Build Capacitor Client (Android)
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Web Static Build
+        run: npm run build
+
+      - name: Capacitor Sync
+        run: npx cap sync android
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: haven-android-release-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
