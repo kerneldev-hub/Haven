@@ -205,307 +205,219 @@ export default function DownloadPage() {
   const latestRelease = data?.releases?.[0] ?? null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground select-none relative overflow-hidden">
+      {/* Visual Glare Accents */}
+      <div className="absolute top-[-10%] right-[-10%] w-[45%] h-[40%] bg-sky-500/5 rounded-full blur-[120px] pointer-events-none -z-10" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[45%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10" />
+
       <div className="container mx-auto max-w-5xl px-4 md:px-8 py-16 md:py-24">
 
         {/* Header */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-xs font-semibold text-muted-foreground mb-8">
-            <Package className="w-3.5 h-3.5" />
-            Cross-Platform · Open Source · Free
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-xs font-semibold text-muted-foreground mb-8 uppercase font-mono tracking-wide">
+            <Package className="w-3.5 h-3.5 text-sky-400" />
+            Cross-Platform · Sovereign Client · Free
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6">
-            Download Haven
+            Get Haven OS
           </h1>
-          <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
-            Available for Windows, macOS, Linux, Android, and iOS. Built automatically via automated
-            GitHub pipelines or easily installable as an offline-first progressive web application.
+          <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8 font-normal">
+            Run Haven directly on your device of choice. Install instantly as an offline-first, sovereign Progressive Web App (PWA) or compile natively from source.
           </p>
 
           {detectedPlatform !== 'unknown' && (
             <div className="max-w-md mx-auto p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 text-sky-400" />
                 </div>
                 <div className="text-left">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Auto-Detected Device</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono">Suggested Client</p>
                   <p className="text-sm font-extrabold text-foreground">
-                    {detectedPlatform === 'windows' && 'Windows Desktop Client'}
-                    {detectedPlatform === 'macos' && 'macOS Native Client'}
-                    {detectedPlatform === 'linux' && 'Linux sovereign Desktop'}
+                    {detectedPlatform === 'windows' && 'Windows Sovereign Client'}
+                    {detectedPlatform === 'macos' && 'macOS Sovereign Client'}
+                    {detectedPlatform === 'linux' && 'Linux Desktop Client'}
                     {detectedPlatform === 'android' && 'Android Portable Workstation'}
-                    {detectedPlatform === 'ios' && 'iOS Mobile Workspace'}
+                    {detectedPlatform === 'ios' && 'iOS Mobile Client'}
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-primary/10 text-primary animate-pulse shrink-0">
-                Suggested Match
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-primary/10 text-primary shrink-0 font-mono">
+                Auto-Detected
               </span>
             </div>
           )}
         </div>
 
-        {/* Release Status */}
-        {loading && (
-          <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
-            <RefreshCw className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Checking for releases...</span>
-          </div>
-        )}
-
-        {fetchError && (
-          <div className="mb-10 p-5 rounded-2xl border border-destructive/30 bg-destructive/5 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-destructive mb-1">Release check failed</p>
-              <p className="text-sm text-muted-foreground">{fetchError}</p>
+        {/* PWA Direct Installation Card (First Class Citizen) */}
+        <div className="mb-16 border border-primary/20 bg-primary/[0.02] rounded-[2rem] p-8 md:p-12 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none -z-10" />
+          
+          <div className="grid md:grid-cols-12 gap-8 items-center">
+            <div className="md:col-span-7 space-y-4 text-left">
+              <Badge className="bg-sky-500/15 text-sky-400 border border-sky-500/25 uppercase font-mono tracking-wider text-[10px] px-2.5 py-1">
+                Primary Sovereign Distribution
+              </Badge>
+              <h2 className="text-2xl md:text-3.5xl font-black tracking-tight">
+                Haven Web Workspace (PWA)
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed font-sans font-medium">
+                Our Progressive Web Application is the most resilient, secure, and instant way to access Haven. Running on modern container sandboxes, it functions completely offline-first with absolute local state storage persistence. No browser margins, full-screen hardware-accelerated rendering.
+              </p>
+              <ul className="grid sm:grid-cols-2 gap-2.5 text-xs font-sans font-semibold text-zinc-300 pt-2">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Offline Sync & Cache</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>No Store Approval Needed</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Auto-updates in Background</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Hardware APIs Activated</span>
+                </li>
+              </ul>
             </div>
-          </div>
-        )}
 
-        {/* No releases yet — Pipeline in progress state */}
-        {!loading && !fetchError && !data?.hasReleases && (
-          <div className="mb-12 p-8 rounded-2xl border border-border bg-card/60 backdrop-blur text-center">
-            <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-5">
-              <Clock className="w-6 h-6 text-amber-500" />
-            </div>
-            <h3 className="text-lg font-bold mb-2">Compiled releases are not yet published</h3>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed mb-6">
-              The automated GitHub Actions pipeline compiles platform binaries when a versioned tag
-              is pushed to the repository. No public tag has been created yet.
-              You can build Haven locally or trigger the pipeline yourself.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <a
-                href="https://github.com/dzlab/haven/actions"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-semibold"
-              >
-                <Github className="w-4 h-4" />
-                View Pipeline Status
-                <ExternalLink className="w-3.5 h-3.5 opacity-50" />
-              </a>
-              <button
-                onClick={fetchReleases}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-semibold"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Check again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Latest release info */}
-        {!loading && latestRelease && (
-          <div className="mb-10 p-5 rounded-2xl border border-border bg-card/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-foreground">{latestRelease.name || latestRelease.tag}</span>
-                  {latestRelease.prerelease && (
-                    <Badge className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">Pre-release</Badge>
-                  )}
-                </div>
-                <span className="text-xs text-muted-foreground">Released {formatDate(latestRelease.publishedAt)}</span>
+            <div className="md:col-span-5 flex flex-col items-center justify-center border border-border/60 bg-[#0e0f12]/60 rounded-2xl p-6 md:p-8 relative">
+              <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center text-primary mb-4 shadow-[0_0_15px_rgba(var(--primary),0.25)] border border-primary/20">
+                <svg viewBox="0 0 24 24" className="w-7 h-7 text-sky-400 animate-pulse" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.4z"/>
+                </svg>
               </div>
-            </div>
-            <a
-              href={`https://github.com/dzlab/haven/releases/tag/${latestRelease.tag}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 shrink-0"
-            >
-              <Github className="w-4 h-4" />
-              View on GitHub
-              <ExternalLink className="w-3 h-3 opacity-50" />
-            </a>
-          </div>
-        )}
 
-        {/* Platform download cards */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-16">
-          {platforms.map((p) => {
-            const assets = latestRelease ? matchAssets(latestRelease.assets, p.ext) : [];
-            const hasAssets = assets.length > 0;
-            const isMatch = detectedPlatform === p.platform;
-
-            return (
-              <div
-                key={p.platform}
-                className={`flex flex-col border rounded-2xl p-5 hover:-translate-y-1 transition-all duration-300 relative ${
-                  isMatch
-                    ? 'border-primary/50 bg-primary/[0.03] shadow-md shadow-primary/5'
-                    : 'border-border bg-card/60 backdrop-blur hover:border-border/80'
-                }`}
-              >
-                {isMatch && (
-                  <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-black uppercase tracking-wider animate-pulse">
-                    Your Device
-                  </span>
-                )}
-
-                <div className="flex items-start justify-between mb-5">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    isMatch ? 'bg-primary/15 text-primary' : 'bg-muted/50 text-foreground'
-                  }`}>
-                    {p.icon}
-                  </div>
-                  {p.platform === 'web' ? (
-                    <Badge className="text-[10px] bg-sky-500/10 text-sky-400 border-sky-500/20">Instant</Badge>
-                  ) : hasAssets ? (
-                    <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Available</Badge>
-                  ) : (
-                    <Badge className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">
-                      Coming soon
-                    </Badge>
-                  )}
+              {isInstallable ? (
+                <div className="w-full space-y-3">
+                  <button
+                    onClick={handleInstallPWA}
+                    className="flex items-center justify-center w-full px-5 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-bold gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span>Install Haven Web App</span>
+                  </button>
+                  <p className="text-[10px] text-muted-foreground text-center font-mono">
+                    Stand-alone window workspace launcher
+                  </p>
                 </div>
-
-                <h3 className="font-bold text-base mb-1">{p.label}</h3>
-                <p className="text-[10px] text-muted-foreground mb-1 font-mono">{p.os}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed mb-5 flex-1">{p.description}</p>
-
-                {p.platform === 'web' ? (
-                  <div className="space-y-2 mt-auto">
-                    {isInstallable ? (
-                      <button
-                        onClick={handleInstallPWA}
-                        className="flex items-center justify-between w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-bold gap-2 shadow-md shadow-primary/10 hover:scale-[1.02]"
-                      >
-                        <span className="truncate">Install Web App</span>
-                        <Download className="w-4 h-4 shrink-0" />
-                      </button>
-                    ) : (
-                      <div className="p-3 bg-muted/40 border border-border/50 rounded-xl text-left text-[10px] text-muted-foreground">
-                        <span className="font-bold text-foreground block mb-1">To Add PWA:</span>
-                        Tap your browser menu and select <span className="text-foreground font-semibold">"Install"</span> or <span className="text-foreground font-semibold">"Add to Home Screen"</span>.
-                      </div>
-                    )}
+              ) : (
+                <div className="text-left space-y-3">
+                  <p className="text-xs font-bold text-center border-b pb-2 mb-2">How to install on your device:</p>
+                  <div className="space-y-2 text-[11px] text-muted-foreground leading-relaxed font-sans font-medium">
+                    <p className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded bg-primary/10 text-primary text-[10px] font-mono flex items-center justify-center shrink-0">1</span>
+                      <span>Tap your browser's menu button (<span className="text-foreground font-bold">⋮</span> or share icon <span className="text-foreground font-bold">⎋</span>)</span>
+                    </p>
+                    <p className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded bg-primary/10 text-primary text-[10px] font-mono flex items-center justify-center shrink-0">2</span>
+                      <span>Select <span className="text-foreground font-bold">"Add to Home Screen"</span> or <span className="text-foreground font-bold">"Install App"</span></span>
+                    </p>
+                    <p className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded bg-primary/10 text-primary text-[10px] font-mono flex items-center justify-center shrink-0">3</span>
+                      <span>Launch Haven directly from your home screen or dock</span>
+                    </p>
                   </div>
-                ) : hasAssets ? (
-                  <div className="space-y-2">
-                    {assets.map((asset) => (
-                      <a
-                        key={asset.id}
-                        href={asset.downloadUrl}
-                        className="flex items-center justify-between w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-bold gap-2"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Download className="w-4 h-4 shrink-0" />
-                          <span className="truncate">{asset.name}</span>
-                        </div>
-                        <span className="shrink-0 opacity-70 font-mono">{formatBytes(asset.size)}</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="border border-dashed border-border rounded-xl p-4 text-center mt-auto bg-muted/20">
-                    <p className="text-[10px] font-bold text-amber-500 mb-2 uppercase tracking-wide">Roadmap Target</p>
-                    {p.buildCommand && (
-                      <div className="mb-3 text-left">
-                        <p className="text-[9px] text-muted-foreground mb-1">Compile manually:</p>
-                        <code className="text-[9px] font-mono bg-background px-2 py-1 rounded text-foreground block truncate">
-                          {p.buildCommand}
-                        </code>
-                      </div>
-                    )}
-                    <a
-                      href={`https://github.com/dzlab/haven/actions`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-primary hover:underline transition-all"
-                    >
-                      <Github className="w-3 h-3" />
-                      Pipeline Status ↗
-                    </a>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Build from source */}
-        <div className="border border-border bg-card/40 rounded-2xl p-8 md:p-10">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <Github className="w-5 h-5" />
-            Build from Source
-          </h2>
+        {/* Native Cross-Platform Coming Soon Section */}
+        <div className="mb-16 border border-border bg-card/45 backdrop-blur-xl rounded-[2rem] p-8 md:p-10 text-center relative overflow-hidden">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/5 rounded-full blur-[120px] pointer-events-none -z-10" />
+          
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-5">
+            <Clock className="w-6 h-6 text-amber-500 animate-pulse" />
+          </div>
+          
+          <h2 className="text-2xl font-black mb-3">Native Desktop & Mobile Sovereign Clients</h2>
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed mb-8">
+            Compiled pre-built binaries for Windows, macOS, Linux, and Android are currently in active validation. Versioned, cryptographically signed installation files will be released on our GitHub tags soon.
+          </p>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-3xl mx-auto text-left">
+            {[
+              { platform: 'Windows Client', version: 'v1.1 (Tauri v2)', desc: 'Pre-packaged MSI/EXE installer with auto-update, safe local sandbox directories.', status: 'In Validation' },
+              { platform: 'macOS Sovereign', version: 'v1.1 (Tauri v2)', desc: 'Apple Silicon & Intel universal DMG builds, optimized for system energy limits.', status: 'In Validation' },
+              { platform: 'Linux Desktop', version: 'v1.1 (AppImage)', desc: 'Resilient standalone AppImage & Debian package dependencies, zero tracking.', status: 'In Validation' },
+              { platform: 'Android Workstation', version: 'v1.2 (Capacitor v8)', desc: 'Standalone APK download, complete full-screen mobile workstation view.', status: 'In Pipeline' }
+            ].map((node, i) => (
+              <div key={i} className="border border-border/50 bg-[#0e0f12]/60 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start gap-1 mb-1.5">
+                    <span className="font-extrabold text-xs text-foreground font-sans">{node.platform}</span>
+                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono">
+                      {node.status}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-primary font-mono block mb-2">{node.version}</span>
+                  <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">{node.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Build from source (Manual Compilation) */}
+        <div className="border border-border bg-card/30 rounded-[2rem] p-8 md:p-10 text-left">
+          <div className="flex items-center gap-3 mb-6 border-b pb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <Github className="w-5 h-5 text-sky-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">Manual Compilation Console</h2>
+              <p className="text-xs text-muted-foreground">Build the sovereign clients locally using your own hardware</p>
+            </div>
+          </div>
+
           <div className="grid md:grid-cols-2 gap-8">
             <div>
-              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-extrabold mb-3 flex items-center gap-2">
                 <Monitor className="w-4 h-4 text-muted-foreground" />
                 Windows / Linux Desktop (Tauri v2)
               </h3>
-              <div className="space-y-2 font-mono text-xs">
+              <div className="space-y-2 font-mono text-[11px] leading-relaxed">
                 {[
                   '# Prerequisites: Node 20+, Rust stable, system deps',
-                  '# Linux: sudo apt install libwebkit2gtk-4.1-dev ...',
-                  'git clone https://github.com/dzlab/haven',
+                  '# Linux: sudo apt install libwebkit2gtk-4.1-dev build-essential',
+                  'git clone https://github.com/dzlab/haven.git',
                   'cd haven && npm install',
-                  'npm run tauri:dev   # development',
-                  'npm run tauri:build # production binary',
+                  'npm run tauri:dev   # Launch developer mode',
+                  'npm run tauri:build # Package local production binary',
                 ].map((cmd, i) => (
-                  <div key={i} className={`px-4 py-2 rounded-lg ${cmd.startsWith('#') ? 'text-muted-foreground' : 'bg-muted/40 text-foreground'}`}>
+                  <div key={i} className={`px-4 py-2.5 rounded-lg border ${cmd.startsWith('#') ? 'text-muted-foreground/80 border-transparent bg-transparent' : 'bg-[#0e0f12]/80 border-border/50 text-foreground'}`}>
                     {cmd}
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-extrabold mb-3 flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-muted-foreground" />
                 Android APK (Capacitor v8)
               </h3>
-              <div className="space-y-2 font-mono text-xs">
+              <div className="space-y-2 font-mono text-[11px] leading-relaxed">
                 {[
                   '# Prerequisites: Node 20+, Android Studio, JDK 17',
-                  'git clone https://github.com/dzlab/haven',
+                  'git clone https://github.com/dzlab/haven.git',
                   'cd haven && npm install && npm run build',
                   'npx cap add android',
                   'npx cap sync android',
                   'cd android && ./gradlew assembleDebug',
-                  '# APK: android/app/build/outputs/apk/debug/',
+                  '# Output path: android/app/build/outputs/apk/debug/',
                 ].map((cmd, i) => (
-                  <div key={i} className={`px-4 py-2 rounded-lg ${cmd.startsWith('#') ? 'text-muted-foreground' : 'bg-muted/40 text-foreground'}`}>
+                  <div key={i} className={`px-4 py-2.5 rounded-lg border ${cmd.startsWith('#') ? 'text-muted-foreground/80 border-transparent bg-transparent' : 'bg-[#0e0f12]/80 border-border/50 text-foreground'}`}>
                     {cmd}
                   </div>
                 ))}
               </div>
             </div>
           </div>
-
-          {/* SHA256 checksums */}
-          {latestRelease && latestRelease.assets.some(a => a.name === 'SHA256SUMS.txt') && (
-            <div className="mt-8 pt-8 border-t border-border">
-              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                Verify Integrity
-              </h3>
-              <div className="font-mono text-xs bg-muted/30 rounded-xl p-4 space-y-1.5">
-                {latestRelease.assets
-                  .filter(a => a.name !== 'SHA256SUMS.txt')
-                  .map(a => (
-                    <div key={a.id} className="flex items-center gap-3 text-muted-foreground">
-                      <span className="text-primary font-bold shrink-0">SHA256</span>
-                      <span className="truncate">{a.name}</span>
-                      <a
-                        href={latestRelease.assets.find(x => x.name === 'SHA256SUMS.txt')?.downloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-xs hover:text-foreground transition-colors"
-                      >
-                        verify ↗
-                      </a>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

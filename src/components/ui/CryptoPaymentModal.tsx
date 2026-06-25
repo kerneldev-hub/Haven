@@ -18,6 +18,24 @@ interface CryptoPaymentModalProps {
   onVerificationSuccess: (newTier: string) => void;
 }
 
+interface CoinOption {
+  symbol: string;
+  name: string;
+  icon: string;
+  network: string;
+  address: string;
+  multiplier: number;
+  color: string;
+}
+
+const coins: CoinOption[] = [
+  { symbol: 'USDT', name: 'Tether USD', icon: '🟢', network: 'TRC20 / BEP20', address: 'TR7NHqdj61L397F1eP2FiK67ST7592tv6n', multiplier: 1, color: 'text-emerald-400 bg-emerald-500/10' },
+  { symbol: 'BTC', name: 'Bitcoin', icon: '🍊', network: 'BTC Mainnet', address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', multiplier: 0.000015, color: 'text-amber-500 bg-amber-500/10' },
+  { symbol: 'ETH', name: 'Ethereum', icon: '🔷', network: 'ERC20 (Mainnet)', address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F', multiplier: 0.00032, color: 'text-indigo-400 bg-indigo-500/10' },
+  { symbol: 'SOL', name: 'Solana', icon: '🟣', network: 'Solana Network', address: 'HN7cABmqscJeX99db9e6C7b36yFFf7g8p12c987DF', multiplier: 0.0055, color: 'text-purple-400 bg-purple-500/10' },
+  { symbol: 'LTC', name: 'Litecoin', icon: '⚡', network: 'Litecoin Mainnet', address: 'Lby3D9Y6bA9A2dfB98deC7b36yFFf7G8p', multiplier: 0.012, color: 'text-sky-400 bg-sky-500/10' }
+];
+
 export function CryptoPaymentModal({
   isOpen,
   onClose,
@@ -29,6 +47,7 @@ export function CryptoPaymentModal({
   planId,
   onVerificationSuccess
 }: CryptoPaymentModalProps) {
+  const [selectedCoin, setSelectedCoin] = useState<CoinOption>(coins[0]);
   const [network, setNetwork] = useState<'TRC20' | 'BEP20'>('TRC20');
   const [copied, setCopied] = useState(false);
   const [verifyStage, setVerifyStage] = useState<'idle' | 'mempool' | 'confirming' | 'syncing' | 'completed' | 'failed'>('idle');
@@ -36,15 +55,18 @@ export function CryptoPaymentModal({
   const [currentAddress, setCurrentAddress] = useState(depositAddress);
   const [txHash, setTxHash] = useState('');
 
-  // Auto-generate BEP20 fallback address if user toggles network
+  // Handle address update based on chosen coin and network
   useEffect(() => {
-    if (network === 'BEP20') {
-      // BEP20 address style
-      setCurrentAddress('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+    if (selectedCoin.symbol === 'USDT') {
+      if (network === 'BEP20') {
+        setCurrentAddress('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+      } else {
+        setCurrentAddress('TR7NHqdj61L397F1eP2FiK67ST7592tv6n');
+      }
     } else {
-      setCurrentAddress(depositAddress);
+      setCurrentAddress(selectedCoin.address);
     }
-  }, [network, depositAddress]);
+  }, [network, selectedCoin]);
 
   // Countdown timer
   useEffect(() => {
@@ -157,7 +179,7 @@ export function CryptoPaymentModal({
               <div className="space-y-1.5 max-w-sm mx-auto">
                 <h3 className="text-xl font-extrabold tracking-tight">Decentralized Token Clearance Complete!</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  USDT deposit on-chain transfer has been securely verified. Your {planId} server-grade license is activated on the database vault.
+                  {selectedCoin.symbol} deposit on-chain transfer has been securely verified. Your {planId} server-grade license is activated on the database vault.
                 </p>
               </div>
 
@@ -180,35 +202,61 @@ export function CryptoPaymentModal({
             </div>
           ) : (
             <div className="space-y-5">
-              {/* Network Selector Tabs */}
+              {/* Coin Variety Selector */}
               <div className="space-y-2 select-none">
-                <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider block">CHOOSE USABLE NETWORK</span>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    onClick={() => setNetwork('TRC20')}
-                    className={`h-11 px-4 text-xs font-mono font-bold rounded-xl border flex items-center justify-between transition-all ${
-                      network === 'TRC20' 
-                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-extrabold' 
-                        : 'border-border hover:bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <span>USDT TRC20</span>
-                    <Badge className={`px-1.5 py-0.25 text-[8px] tracking-wide uppercase ${network === 'TRC20' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-muted'}`}>TRON</Badge>
-                  </button>
-
-                  <button
-                    onClick={() => setNetwork('BEP20')}
-                    className={`h-11 px-4 text-xs font-mono font-bold rounded-xl border flex items-center justify-between transition-all ${
-                      network === 'BEP20' 
-                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-extrabold' 
-                        : 'border-border hover:bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <span>USDT BEP20</span>
-                    <Badge className={`px-1.5 py-0.25 text-[8px] tracking-wide uppercase ${network === 'BEP20' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-muted'}`}>BSC</Badge>
-                  </button>
+                <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider block">SELECT SETTLEMENT TOKENS</span>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {coins.map((coin) => (
+                    <button
+                      key={coin.symbol}
+                      onClick={() => {
+                        setSelectedCoin(coin);
+                        setVerifyStage('idle');
+                      }}
+                      className={`py-2 px-1 text-center rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                        selectedCoin.symbol === coin.symbol
+                          ? 'border-primary/50 bg-primary/10 text-foreground font-black'
+                          : 'border-border bg-card/45 hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-sm mb-1">{coin.icon}</span>
+                      <span className="text-[10.5px] font-bold font-mono tracking-tight">{coin.symbol}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {/* Network Selector Tabs (Only for USDT) */}
+              {selectedCoin.symbol === 'USDT' && (
+                <div className="space-y-2 select-none animate-in fade-in duration-300">
+                  <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider block">CHOOSE USABLE NETWORK</span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      onClick={() => setNetwork('TRC20')}
+                      className={`h-11 px-4 text-xs font-mono font-bold rounded-xl border flex items-center justify-between transition-all ${
+                        network === 'TRC20' 
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-extrabold' 
+                          : 'border-border hover:bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span>USDT TRC20</span>
+                      <Badge className={`px-1.5 py-0.25 text-[8px] tracking-wide uppercase ${network === 'TRC20' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-muted'}`}>TRON</Badge>
+                    </button>
+
+                    <button
+                      onClick={() => setNetwork('BEP20')}
+                      className={`h-11 px-4 text-xs font-mono font-bold rounded-xl border flex items-center justify-between transition-all ${
+                        network === 'BEP20' 
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-extrabold' 
+                          : 'border-border hover:bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span>USDT BEP20</span>
+                      <Badge className={`px-1.5 py-0.25 text-[8px] tracking-wide uppercase ${network === 'BEP20' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-muted'}`}>BSC</Badge>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Deposit Visual Grid */}
               <div className="grid md:grid-cols-12 gap-5 items-center">
@@ -252,13 +300,13 @@ export function CryptoPaymentModal({
                   <div className="space-y-1">
                     <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest block">SECURED DEPOSIT VALUE</span>
                     <div className="text-2xl font-black text-foreground font-mono flex items-baseline gap-1.5 text-left">
-                      {amount.toLocaleString()} <span className="text-sm font-bold text-emerald-500">{currency}</span>
-                      <span className="text-xs font-mono text-zinc-500 font-normal ml-auto">~ {(amount * 105).toFixed(0)} DZD</span>
+                      {(amount * selectedCoin.multiplier).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} <span className="text-sm font-bold text-emerald-500">{selectedCoin.symbol}</span>
+                      <span className="text-xs font-mono text-zinc-500 font-normal ml-auto">~ {amount.toLocaleString()} USD</span>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-left">
-                    <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest block">DEPOSIT ADDRESS ({network})</span>
+                    <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest block">DEPOSIT ADDRESS ({selectedCoin.symbol === 'USDT' ? network : selectedCoin.network})</span>
                     <div className="flex items-center gap-2 bg-background border p-2.5 rounded-xl max-w-full overflow-hidden shadow-inner">
                       <span className="font-mono text-xs text-foreground truncate select-all grow">{currentAddress}</span>
                       <button 
@@ -269,7 +317,7 @@ export function CryptoPaymentModal({
                       </button>
                     </div>
                     <span className="text-[9px] text-zinc-500 block leading-normal">
-                      Only dispatch {currency} over custom {network} chain specs. Transferring other currencies causes permanent depletion.
+                      Only dispatch {selectedCoin.symbol} over custom {selectedCoin.symbol === 'USDT' ? network : selectedCoin.network} chain specs. Transferring other currencies causes permanent depletion.
                     </span>
                   </div>
                 </div>
@@ -331,7 +379,7 @@ export function CryptoPaymentModal({
                     onClick={handleVerifyPayment}
                     className="w-full h-12 text-xs font-bold font-mono tracking-wider uppercase bg-primary hover:bg-primary/95 text-primary-foreground flex justify-center items-center gap-2 rounded-xl"
                   >
-                    I Have Dispatched USDT Deposit <ArrowRight className="w-3.5 h-3.5" />
+                    I Have Dispatched {selectedCoin.symbol} Deposit <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 ) : (
                   <Button 

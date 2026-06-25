@@ -29,31 +29,12 @@ export default function IntegrationsPage() {
   // Existing system integrations (workspace settings)
   const [integrations, setIntegrations] = useState([
     { name: 'GitHub', desc: 'Sync repositories, issues, and pull requests.', icon: Code, category: 'Dev Tools', connected: true },
-    { name: 'Sentry / GlitchTip', desc: 'Real-time application monitoring and zero-cost error tracking.', icon: Webhook, category: 'Dev Tools', connected: false },
-    { name: 'Trigger.dev', desc: 'Open-source background jobs and long-running workflows.', icon: Code, category: 'Dev Tools', connected: false },
-    { name: 'n8n', desc: 'Fair-code workflow automation and API orchestration.', icon: Webhook, category: 'Dev Tools', connected: false },
-    { name: 'Bruno', desc: 'Open-source IDE for exploring and testing API collections.', icon: Code, category: 'Dev Tools', connected: false },
-    { name: 'Turso', desc: 'Edge libSQL/SQLite databases for low-latency queries.', icon: Database, category: 'Database', connected: true },
-    { name: 'Supabase', desc: 'Open-source Firebase alternative with Postgres & Auth.', icon: Database, category: 'Database', connected: false },
-    { name: 'Aiven', desc: 'Managed Redis caching and Kafka event streaming.', icon: Database, category: 'Database', connected: false },
-    { name: 'Ably', desc: 'Serverless WebSocket pub/sub for real-time multiplayer.', icon: Webhook, category: 'Database', connected: false },
-    { name: 'Logto', desc: 'Modern open-source identity and SSO provider.', icon: Lock, category: 'Auth & Security', connected: false },
-    { name: 'Lucia Auth', desc: 'Simple, flexible, edge-compatible authentication.', icon: Lock, category: 'Auth & Security', connected: false },
-    { name: 'Unkey', desc: 'Edge-based API key management and rate-limiting.', icon: Lock, category: 'Auth & Security', connected: false },
-    { name: 'Cloudflare Turnstile', desc: 'Privacy-first bot protection and CAPTCHA replacement.', icon: Lock, category: 'Auth & Security', connected: false },
-    { name: 'Vaultwarden', desc: 'Self-hosted open source password and secrets vault.', icon: Lock, category: 'Auth & Security', connected: false },
-    { name: 'Umami', desc: 'Lightweight, privacy-focused open source web analytics.', icon: Settings, category: 'Analytics', connected: false },
-    { name: 'PostHog', desc: 'Product analytics, session recording, and feature flags.', icon: Settings, category: 'Analytics', connected: false },
-    { name: 'GrowthBook', desc: 'Open-source feature flags and A/B testing platform.', icon: Settings, category: 'Analytics', connected: false },
-    { name: 'Cloudflare Workers & Pages', desc: 'Fast static generation and Serverless edge compute.', icon: Box, category: 'App Hosting', connected: false },
-    { name: 'Vercel', desc: 'Deploy frontend frameworks and serverless functions.', icon: Box, category: 'App Hosting', connected: false },
-    { name: 'Discord', desc: 'Sync user roles and cross-post webhook messages.', icon: Gamepad2, category: 'Comms', connected: true },
-    { name: 'Resend', desc: 'Developer-first transactional email delivery API.', icon: Webhook, category: 'Comms', connected: false },
-    { name: 'Listmonk', desc: 'Self-hosted, open-source newsletter and mailing list manager.', icon: Webhook, category: 'Comms', connected: false },
-    { name: 'Novu', desc: 'Open-source unified notification infrastructure.', icon: Webhook, category: 'Comms', connected: false },
-    { name: 'Typebot', desc: 'Conversational forms and chatbot builder.', icon: Settings, category: 'Comms', connected: false },
-    { name: 'Stripe', desc: 'Secure payment gateways & subscription billing.', icon: Lock, category: 'Finance', connected: false },
-    { name: 'Polar.sh', desc: 'Monetize open source and manage sponsor subscriptions.', icon: Lock, category: 'Finance', connected: false }
+    { name: 'Sentry / GlitchTip', desc: 'Real-time application monitoring and zero-cost error tracking.', icon: Webhook, category: 'Dev Tools', connected: true },
+    { name: 'Turso (libSQL)', desc: 'Unified Edge database and backend state manager, optimized for 1,000+ concurrent active connections.', icon: Database, category: 'Database', connected: true, badge: 'Unified Stack' },
+    { name: 'Ably Realtime', desc: 'Unified high-concurrency WebSocket messaging & peer room signaling engine.', icon: Webhook, category: 'Database', connected: true, badge: 'Unified Stack' },
+    { name: 'Logto Identity', desc: 'Unified modern open-source identity, OAuth, and SSO security layer.', icon: Lock, category: 'Auth & Security', connected: true, badge: 'Unified Stack' },
+    { name: 'Umami', desc: 'Lightweight, privacy-focused open source web analytics.', icon: Settings, category: 'Analytics', connected: true },
+    { name: 'Stripe', desc: 'Secure multi-gateway payment architecture for subscriptions and credit bundles.', icon: Lock, category: 'Finance', connected: true }
   ]);
 
   // Comprehensive resource directory parsed directly from the user's links cataloging

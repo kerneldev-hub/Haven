@@ -1004,7 +1004,7 @@ export default function PricingPage() {
                onClick={() => startDirectCheckout('PRO', 'crypto')} 
                className="font-bold text-xs uppercase font-mono tracking-wider h-11 px-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg border-2 border-emerald-500/20 shadow-emerald-500/20"
             >
-              DEPLOY WITH CRYPTO USDT
+              DEPLOY WITH CRYPTO (USDT, BTC, ETH...)
             </Button>
           </div>
 
@@ -1304,7 +1304,7 @@ export default function PricingPage() {
               variant="secondary" 
               className="w-full sm:w-auto h-14 px-8 font-bold text-sm font-mono rounded-2xl transition-all shadow-sm flex items-center justify-center cursor-pointer"
             >
-               <Coins className="w-5 h-5 mr-3" /> DEPLOY WITH CRYPTO USDT
+               <Coins className="w-5 h-5 mr-3" /> DEPLOY WITH CRYPTO (USDT, BTC, ETH...)
             </Button>
           </div>
         </div>
